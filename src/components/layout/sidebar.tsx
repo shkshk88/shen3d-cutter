@@ -8,9 +8,10 @@ interface SidebarProps {
   analysisResult?: MeshAnalysisResult | null
   selectedImplant?: number | null
   onImplantSelect?: (index: number | null) => void
+  annotationCount?: number
 }
 
-export function Sidebar({ analysisResult, selectedImplant, onImplantSelect }: SidebarProps) {
+export function Sidebar({ analysisResult, selectedImplant, onImplantSelect, annotationCount = 0 }: SidebarProps) {
   const size = analysisResult?.boundingBox
     ? new THREE.Vector3()
     : null
@@ -19,7 +20,7 @@ export function Sidebar({ analysisResult, selectedImplant, onImplantSelect }: Si
   }
 
   return (
-    <aside className="w-64 border-r bg-card flex flex-col">
+    <aside className="w-64 border-r bg-card flex flex-col h-full">
       <div className="p-4">
         <h1 className="text-xl font-bold text-primary">Shen3D</h1>
         <p className="text-xs text-muted-foreground">Cutter Parametrico AI</p>
@@ -62,6 +63,7 @@ export function Sidebar({ analysisResult, selectedImplant, onImplantSelect }: Si
             <p>Facce: {analysisResult.faceCount.toLocaleString()}</p>
             <p>Feature: {analysisResult.highCurvatureIndices.length.toLocaleString()}</p>
             <p>Impianti: {analysisResult.cylinderCandidates.length}</p>
+            <p>Annotazioni: {annotationCount}</p>
             {size && (
               <>
                 <Separator className="my-2" />
@@ -75,6 +77,18 @@ export function Sidebar({ analysisResult, selectedImplant, onImplantSelect }: Si
         ) : (
           <p className="text-sm text-muted-foreground">Carica un STL per iniziare</p>
         )}
+      </div>
+
+      {/* Legenda curvatura */}
+      <div className="mt-auto p-4 border-t">
+        <p className="text-sm font-medium text-muted-foreground mb-2">LEGENDA CURVATURA</p>
+        <div className="h-3 w-full rounded-full" style={{
+          background: 'linear-gradient(to right, #0000ff, #00ffff, #00ff00, #ffff00, #ff0000)'
+        }} />
+        <div className="flex justify-between text-[10px] text-muted-foreground mt-1">
+          <span>Bassa</span>
+          <span>Alta</span>
+        </div>
       </div>
     </aside>
   )
