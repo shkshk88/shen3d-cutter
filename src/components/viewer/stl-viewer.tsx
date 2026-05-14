@@ -14,9 +14,14 @@ interface StlViewerProps {
   selectedImplant: number | null
   onImplantSelect: (index: number | null) => void
   onAnalysisComplete: (result: MeshAnalysisResult) => void
+  showCurvature: boolean
+  curvatureOpacity: number
 }
 
-export function StlViewer({ url, analysisResult, selectedImplant, onImplantSelect, onAnalysisComplete }: StlViewerProps) {
+export function StlViewer({
+  url, analysisResult, selectedImplant, onImplantSelect, onAnalysisComplete,
+  showCurvature, curvatureOpacity
+}: StlViewerProps) {
   return (
     <Canvas
       camera={{ position: [0, 0, 100], fov: 50 }}
@@ -28,7 +33,12 @@ export function StlViewer({ url, analysisResult, selectedImplant, onImplantSelec
       <directionalLight position={[-50, -50, -25]} intensity={0.3} />
 
       <Suspense fallback={<LoadingSpinner />}>
-        <StlModel url={url} onAnalysisComplete={onAnalysisComplete} />
+        <StlModel
+          url={url}
+          onAnalysisComplete={onAnalysisComplete}
+          showCurvature={showCurvature}
+          curvatureOpacity={curvatureOpacity}
+        />
       </Suspense>
 
       {analysisResult?.cylinderCandidates.map((cyl, i) => (

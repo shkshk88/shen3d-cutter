@@ -3,6 +3,7 @@
 import { useState, useCallback } from 'react'
 import dynamic from 'next/dynamic'
 import { Button } from '@/components/ui/button'
+import { Slider } from '@/components/ui/slider'
 import { MeshAnalysisResult } from '@/lib/mesh-analysis'
 
 const StlViewer = dynamic(
@@ -27,6 +28,8 @@ interface ViewerSectionProps {
 export function ViewerSection({ analysisResult, onAnalysisResultChange, selectedImplant, onImplantSelect }: ViewerSectionProps) {
   const [stlUrl, setStlUrl] = useState<string | null>(null)
   const [fileName, setFileName] = useState<string>('')
+  const [showCurvature, setShowCurvature] = useState(false)
+  const [curvatureOpacity, setCurvatureOpacity] = useState(0.7)
 
   const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -36,6 +39,7 @@ export function ViewerSection({ analysisResult, onAnalysisResultChange, selected
     setFileName(file.name)
     onAnalysisResultChange(null)
     onImplantSelect(null)
+    setShowCurvature(false)
   }, [onAnalysisResultChange, onImplantSelect])
 
   const handleDrop = useCallback((e: React.DragEvent) => {
@@ -47,6 +51,7 @@ export function ViewerSection({ analysisResult, onAnalysisResultChange, selected
     setFileName(file.name)
     onAnalysisResultChange(null)
     onImplantSelect(null)
+    setShowCurvature(false)
   }, [onAnalysisResultChange, onImplantSelect])
 
   const handleAnalysisComplete = useCallback((result: MeshAnalysisResult) => {
@@ -64,6 +69,29 @@ export function ViewerSection({ analysisResult, onAnalysisResultChange, selected
           </Button>
           <input id="stl-upload" type="file" accept=".stl" onChange={handleFileUpload} className="hidden" />
         </label>
+
+        {stlUrl && (
+          <>
+            <Button
+              variant={showCurvature ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setShowCurvature(!showCurvature)}
+            >
+              Curvatura
+            </Button>
+
+            {showCurvature && (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Opacità</span>
+                <Slider
+                  min={0} max={100} defaultValue={[70]}
+                  onValueChange={(v) => setCurvatureOpacity((Array.isArray(v) ? v[0] : v as number) / 100)}
+                  className="w-24"
+                />
+              </div>
+            )}
+          </>
+        )}
 
         {analysisResult && (
           <div className="flex items-center gap-2 ml-auto">
@@ -96,6 +124,8 @@ export function ViewerSection({ analysisResult, onAnalysisResultChange, selected
             selectedImplant={selectedImplant}
             onImplantSelect={onImplantSelect}
             onAnalysisComplete={handleAnalysisComplete}
+            showCurvature={showCurvature}
+            curvatureOpacity={curvatureOpacity}
           />
         ) : (
           <div className="h-full flex items-center justify-center border-2 border-dashed rounded-lg m-4">
