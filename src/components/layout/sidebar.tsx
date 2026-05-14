@@ -1,6 +1,8 @@
 'use client'
 
+import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
+import { downloadAnnotations } from '@/lib/export-annotations'
 import { MeshAnalysisResult } from '@/lib/mesh-analysis'
 import * as THREE from 'three'
 
@@ -77,6 +79,19 @@ export function Sidebar({ analysisResult, selectedImplant, onImplantSelect, anno
         ) : (
           <p className="text-sm text-muted-foreground">Carica un STL per iniziare</p>
         )}
+      </div>
+
+      {/* Export annotazioni */}
+      <div className="p-4 border-t">
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-full"
+          onClick={downloadAnnotations}
+          disabled={annotationCount === 0}
+        >
+          Export Annotazioni ({annotationCount})
+        </Button>
       </div>
 
       {/* Legenda curvatura */}
