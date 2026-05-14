@@ -1,0 +1,1143 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shen3D — Cutter Parametrico AI</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Playfair+Display:wght@700&display=swap');
+
+  :root {
+    --primary: #6366f1;
+    --primary-light: #818cf8;
+    --accent: #f59e0b;
+    --success: #10b981;
+    --danger: #ef4444;
+    --dark: #1e1b4b;
+    --gray-50: #f8fafc;
+    --gray-100: #f1f5f9;
+    --gray-200: #e2e8f0;
+    --gray-600: #475569;
+    --gray-800: #1e293b;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', sans-serif;
+    color: var(--gray-800);
+    line-height: 1.7;
+    background: white;
+  }
+
+  .page {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 40px 60px;
+  }
+
+  .page-break { page-break-after: always; }
+
+  /* COVER */
+  .cover {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    background: linear-gradient(135deg, #1e1b4b 0%, #312e81 40%, #4338ca 100%);
+    color: white;
+    padding: 60px;
+    border-radius: 0;
+  }
+  .cover h1 {
+    font-family: 'Playfair Display', serif;
+    font-size: 3.5em;
+    margin-bottom: 10px;
+    letter-spacing: -1px;
+  }
+  .cover .subtitle {
+    font-size: 1.4em;
+    color: #c7d2fe;
+    margin-bottom: 40px;
+    font-weight: 300;
+  }
+  .cover .tagline {
+    font-size: 1.1em;
+    color: #a5b4fc;
+    max-width: 600px;
+    line-height: 1.8;
+  }
+  .cover .badge {
+    display: inline-block;
+    background: rgba(255,255,255,0.15);
+    border: 1px solid rgba(255,255,255,0.25);
+    border-radius: 50px;
+    padding: 8px 24px;
+    font-size: 0.85em;
+    margin-top: 30px;
+    color: #e0e7ff;
+  }
+
+  /* HEADINGS */
+  h1 {
+    font-family: 'Playfair Display', serif;
+    font-size: 2.4em;
+    color: var(--dark);
+    margin: 60px 0 20px;
+    border-bottom: 3px solid var(--primary);
+    padding-bottom: 10px;
+  }
+  h2 {
+    font-size: 1.6em;
+    color: var(--primary);
+    margin: 40px 0 15px;
+  }
+  h3 {
+    font-size: 1.25em;
+    color: var(--gray-800);
+    margin: 30px 0 10px;
+  }
+
+  p { margin: 10px 0; }
+
+  /* BOXES */
+  .box {
+    border-radius: 12px;
+    padding: 24px;
+    margin: 20px 0;
+  }
+  .box-blue {
+    background: #eef2ff;
+    border-left: 4px solid var(--primary);
+  }
+  .box-green {
+    background: #ecfdf5;
+    border-left: 4px solid var(--success);
+  }
+  .box-yellow {
+    background: #fffbeb;
+    border-left: 4px solid var(--accent);
+  }
+  .box-red {
+    background: #fef2f2;
+    border-left: 4px solid var(--danger);
+  }
+
+  /* DIAGRAMS */
+  .diagram {
+    background: var(--gray-50);
+    border: 2px solid var(--gray-200);
+    border-radius: 12px;
+    padding: 30px;
+    margin: 25px 0;
+    font-family: 'Courier New', monospace;
+    font-size: 0.85em;
+    line-height: 1.5;
+    overflow-x: auto;
+    white-space: pre;
+  }
+
+  .flow-box {
+    background: white;
+    border: 2px solid var(--primary);
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin: 15px 0;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .flow-box .icon {
+    font-size: 2em;
+    min-width: 50px;
+    text-align: center;
+  }
+  .flow-box .content { flex: 1; }
+  .flow-box .label {
+    font-weight: 700;
+    color: var(--primary);
+    font-size: 1.05em;
+  }
+
+  .arrow-down {
+    text-align: center;
+    font-size: 1.8em;
+    color: var(--primary-light);
+    margin: 5px 0;
+  }
+
+  /* TOOL CARDS */
+  .tool-card {
+    border: 2px solid var(--gray-200);
+    border-radius: 12px;
+    padding: 24px;
+    margin: 20px 0;
+    background: white;
+  }
+  .tool-card .tool-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+  .tool-card .tool-name {
+    font-size: 1.2em;
+    font-weight: 700;
+    color: var(--dark);
+  }
+  .tool-card .tool-type {
+    background: var(--primary);
+    color: white;
+    font-size: 0.7em;
+    padding: 3px 10px;
+    border-radius: 50px;
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+  .tool-card .tool-example {
+    background: var(--gray-50);
+    border-radius: 8px;
+    padding: 14px;
+    margin-top: 12px;
+    font-family: 'Courier New', monospace;
+    font-size: 0.85em;
+    border: 1px solid var(--gray-200);
+  }
+  .tool-card .tool-example .example-label {
+    font-family: 'Inter', sans-serif;
+    font-size: 0.8em;
+    font-weight: 600;
+    color: var(--primary);
+    margin-bottom: 6px;
+    display: block;
+  }
+
+  /* PHASE CARDS */
+  .phase {
+    display: flex;
+    gap: 20px;
+    margin: 20px 0;
+    align-items: flex-start;
+  }
+  .phase-num {
+    background: var(--primary);
+    color: white;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 800;
+    font-size: 1.2em;
+    flex-shrink: 0;
+  }
+  .phase-content {
+    flex: 1;
+    background: var(--gray-50);
+    border-radius: 12px;
+    padding: 20px;
+    border: 1px solid var(--gray-200);
+  }
+  .phase-content h3 {
+    margin: 0 0 8px;
+    color: var(--dark);
+  }
+  .phase-meta {
+    display: flex;
+    gap: 16px;
+    margin-top: 10px;
+    font-size: 0.85em;
+  }
+  .phase-meta span {
+    background: white;
+    padding: 4px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--gray-200);
+  }
+
+  /* COMPARISON TABLE */
+  .compare-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 12px;
+    margin: 20px 0;
+  }
+  .compare-cell {
+    padding: 12px;
+    border-radius: 8px;
+    text-align: center;
+    font-size: 0.9em;
+  }
+  .compare-header {
+    background: var(--dark);
+    color: white;
+    font-weight: 700;
+  }
+  .compare-yes { background: #ecfdf5; color: #065f46; }
+  .compare-no { background: #fef2f2; color: #991b1b; }
+  .compare-partial { background: #fffbeb; color: #92400e; }
+
+  /* GLOSSARY */
+  .glossary-item {
+    padding: 12px 0;
+    border-bottom: 1px solid var(--gray-200);
+  }
+  .glossary-term {
+    font-weight: 700;
+    color: var(--primary);
+  }
+
+  /* LIST */
+  ul, ol { margin: 10px 0 10px 25px; }
+  li { margin: 4px 0; }
+
+  .highlight { background: #fef3c7; padding: 2px 6px; border-radius: 4px; }
+
+  .toc {
+    background: var(--gray-50);
+    border: 2px solid var(--gray-200);
+    border-radius: 12px;
+    padding: 30px 40px;
+    margin: 30px 0;
+  }
+  .toc h3 { margin: 0 0 15px; color: var(--dark); }
+  .toc ol { line-height: 2.2; }
+  .toc a { color: var(--primary); text-decoration: none; }
+
+  @media print {
+    .page { padding: 30px 40px; }
+    .cover { min-height: auto; padding: 80px 40px; }
+    h1 { page-break-before: always; margin-top: 20px; }
+    .no-break { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ============ COVER ============ -->
+<div class="cover">
+  <h1>Shen3D</h1>
+  <div class="subtitle">Cutter Parametrico AI</div>
+  <div class="tagline">
+    Un tool web che analizza modelli STL di ponti dentali su impianti,<br>
+    disegna linee di taglio con intelligenza artificiale,<br>
+    e genera piani di taglio parametrici modificabili interattivamente<br>
+    per scomporre il ponte in parti assemblabili.
+  </div>
+  <div class="badge">📋 Guida al Progetto — Maggio 2026</div>
+</div>
+
+<!-- ============ TOC ============ -->
+<div class="page">
+<div class="toc">
+  <h3>📑 Indice</h3>
+  <ol>
+    <li><a href="#problema">Il Problema — Cosa risolviamo</a></li>
+    <li><a href="#soluzione">La Soluzione — Come funziona</a></li>
+    <li><a href="#flusso">Flusso completo — Dal STL al taglio</a></li>
+    <li><a href="#architettura">Architettura — I 5 Layer</a></li>
+    <li><a href="#strumenti">Gli Strumenti — Cosa sono e come funzionano</a></li>
+    <li><a href="#fasi">Le Fasi — Piano di sviluppo</a></li>
+    <li><a href="#ai-strategy">Strategia AI — Chi fa cosa</a></li>
+    <li><a href="#glossario">Glossario — I termini tecnici spiegati</a></li>
+  </ol>
+</div>
+</div>
+
+<div class="page-break"></div>
+
+<!-- ============ 1. IL PROBLEMA ============ -->
+<h1 id="problema">1. Il Problema</h1>
+
+<div class="box box-red">
+<strong>Scenario attuale:</strong> Un tecnico dentale riceve uno STL di un ponte avvitato su impianti. Deve scomporlo in 2 parti (sopra e sotto) lungo una linea di taglio precisa. Oggi fa tutto a mano — lungo, impreciso, ripetitivo.
+</div>
+
+<p>Il processo manuale è così:</p>
+
+<div class="flow-box">
+  <div class="icon">📥</div>
+  <div class="content">
+    <div class="label">1. Riceve lo STL</div>
+    Scansione intraorale del ponte su impianti
+  </div>
+</div>
+<div class="arrow-down">↓</div>
+<div class="flow-box">
+  <div class="icon">👁️</div>
+  <div class="content">
+    <div class="label">2. Guarda il modello</div>
+    Cerca visivamente dove tagliare — dove finisce una parte e inizia l'altra
+  </div>
+</div>
+<div class="arrow-down">↓</div>
+<div class="flow-box">
+  <div class="icon">✏️</div>
+  <div class="label">3. Disegna la linea di taglio a mano</div>
+</div>
+<div class="arrow-down">↓</div>
+<div class="flow-box">
+  <div class="icon">✂️</div>
+  <div class="label">4. Taglia il modello in 2 parti</div>
+</div>
+<div class="arrow-down">↓</div>
+<div class="flow-box">
+  <div class="icon">🔧</div>
+  <div class="label">5. Regola, corregge, riprova — iterazioni lente</div>
+</div>
+
+<div class="box box-yellow">
+<strong>Il problema:</strong> Ogni ponte è diverso, ogni taglio è un'interpretazione. Servono 15-30 minuti per ponte, con risultati variabili. Un errore = tempo perso + materiale sprecato.
+</div>
+
+<div class="page-break"></div>
+
+<!-- ============ 2. LA SOLUZIONE ============ -->
+<h1 id="soluzione">2. La Soluzione</h1>
+
+<p>Un tool web dove:</p>
+
+<ol>
+  <li><strong>Importi</strong> il file STL del ponte</li>
+  <li>L'<strong>AI analizza</strong> la geometria → individua gli impianti e propone dove tagliare</li>
+  <li>L'AI <strong>disegna le linee di taglio</strong> sulla superficie del modello</li>
+  <li>Queste linee generano un <strong>piano di taglio parametrico</strong> — una superficie 3D che separa le due parti</li>
+  <li>Puoi <strong>modificare il piano</strong> trascinando punti, cambiando profilo, regolando lo spessore</li>
+  <li><strong>Export</strong> delle 2 parti separate in STL</li>
+</ol>
+
+<div class="box box-green">
+<strong>Cosa significa "parametrico":</strong> Il piano di taglio non è fisso — è definito da parametri (posizione dei punti, forma del profilo, spessore). Se cambi un parametro, il piano si ricalcola automaticamente. Come un foglio Excel: cambi una cella e tutte le formule si aggiornano.
+</div>
+
+<h2>Cosa significa in pratica</h2>
+
+<div class="diagram">┌─────────────────────────────────────────────────────────────┐
+│                    PRIMA (manuale)                          │
+│                                                            │
+│  Tecnico → guarda STL → disegna a mano → taglia → corregge │
+│  ⏱ 15-30 min per ponte, risultati variabili                │
+└─────────────────────────────────────────────────────────────┘
+
+                         ⬇ diventa ⬇
+
+┌─────────────────────────────────────────────────────────────┐
+│                    DOPO (con Shen3D)                        │
+│                                                            │
+│  Importa STL → AI propone taglio → regola parametri → done │
+│  ⏱ 2-5 min per ponte, risultati consistenti                │
+└─────────────────────────────────────────────────────────────┘</div>
+
+<div class="page-break"></div>
+
+<!-- ============ 3. FLUSSO ============ -->
+<h1 id="flusso">3. Flusso Completo</h1>
+
+<p>Ecco cosa succede quando l'utente usa il tool, passo per passo:</p>
+
+<div class="flow-box">
+  <div class="icon">📁</div>
+  <div class="content">
+    <div class="label">Passo 1 — Importa STL</div>
+    L'utente carica il file STL del ponte. Il browser lo visualizza in 3D con rotazione, zoom, pan.
+  </div>
+</div>
+<div class="arrow-down">↓</div>
+
+<div class="flow-box">
+  <div class="icon">🧠</div>
+  <div class="content">
+    <div class="label">Passo 2 — AI analizza</div>
+    L'AI scansiona la geometria del modello. Individua:<br>
+    • Dove sono gli impianti (cilindri metallici)<br>
+    • Dove passa il solco tra le parti (cambio di curvatura)<br>
+    • La posizione ottimale del piano di taglio
+  </div>
+</div>
+<div class="arrow-down">↓</div>
+
+<div class="flow-box">
+  <div class="icon">📐</div>
+  <div class="content">
+    <div class="label">Passo 3 — Linee proposte</div>
+    L'AI disegna linee colorate sulla superficie del modello STL. Sono le <strong>linee guida</strong> — il percorso dove il taglio avverrà. L'utente può accettarle o modificarle.
+  </div>
+</div>
+<div class="arrow-down">↓</div>
+
+<div class="flow-box">
+  <div class="icon">✋</div>
+  <div class="content">
+    <div class="label">Passo 4 — Modifica interattiva</div>
+    Ogni linea ha <strong>punti di controllo</strong> (sfere colorate) che puoi trascinare col mouse. Sposti un punto → la curva si aggiorna. Puoi anche:<br>
+    • Cambiare il <strong>profilo</strong> del taglio (ovale, rettangolare, custom)<br>
+    • Regolare lo <strong>spessore</strong> con uno slider (0.5mm → 3mm)<br>
+    • Aggiungere/rimuovere punti di controllo
+  </div>
+</div>
+<div class="arrow-down">↓</div>
+
+<div class="flow-box">
+  <div class="icon">✂️</div>
+  <div class="content">
+    <div class="label">Passo 5 — Taglio</div>
+    Il sistema esegue il taglio: il piano parametrico divide il modello STL in 2 parti (sopra + sotto). Anteprima visiva delle due parti separate.
+  </div>
+</div>
+<div class="arrow-down">↓</div>
+
+<div class="flow-box">
+  <div class="icon">💾</div>
+  <div class="content">
+    <div class="label">Passo 6 — Export</div>
+    L'utente scarica i 2 file STL separati, pronti per la stampa 3D o la fresatura.
+  </div>
+</div>
+
+<div class="page-break"></div>
+
+<!-- ============ 4. ARCHITETTURA ============ -->
+<h1 id="architettura">4. Architettura — I 5 Layer</h1>
+
+<p>Il sistema è diviso in 5 "strati" che collaborano. Ogni strato ha un compito specifico.</p>
+
+<div class="diagram">
+╔═══════════════════════════════════════════════════════════════╗
+║                    BROWSER (Next.js)                        ║
+║                                                              ║
+║  ┌─────────────┐   ┌──────────────┐   ┌──────────────────┐  ║
+║  │  LAYER 1   │   │  LAYER 3    │   │  LAYER 4        │  ║
+║  │  VIEWER    │   │  KERNEL CAD │   │  EDITORE        │  ║
+║  │            │   │             │   │  PARAMETRICO     │  ║
+║  │ Mostra STL │←→│ Calcoli CAD │   │                  │  ║
+║  │ Rotazione  │   │ Booleane    │   │ Drag points     │  ║
+║  │ Zoom       │   │ NURBS       │   │ Slider spessore  │  ║
+║  │ Luci       │   │ Proiezioni  │   │ Profili          │  ║
+║  └─────────────┘   └──────────────┘   └──────────────────┘  ║
+║         ↕                  ↕                  ↕              ║
+║  ┌───────────────────────────────────────────────────────┐  ║
+║  │              LAYER 2 — AI MODULE                      │  ║
+║  │  Analisi superficie → Linee di taglio → Suggerimenti  │  ║
+║  └───────────────────────────────────────────────────────┘  ║
+╚═══════════════════════════════════════════════════════════════╝
+                          ↕ API
+╔═══════════════════════════════════════════════════════════════╗
+║                   SERVER (VPS)                               ║
+║                                                              ║
+║  ┌───────────────────────────────────────────────────────┐  ║
+║  │              LAYER 5 — ORCHESTRATORE AI               │  ║
+║  │  Hermes coordina: FreeCAD MCP, OpenSCAD MCP, ML      │  ║
+║  │  Memorizza i tagli → migliora col tempo              │  ║
+║  └───────────────────────────────────────────────────────┘  ║
+╚═══════════════════════════════════════════════════════════════╝</div>
+
+<!-- LAYER 1 -->
+<h2>Layer 1 — Viewer STL</h2>
+<p>È ciò che <strong>vedi</strong> sullo schermo. Mostra il modello 3D e ti permette di girarlo, zoomare, esplorare.</p>
+
+<div class="box box-blue">
+<strong>Analogia:</strong> È come aprire una foto in un visualizzatore — vedi l'immagine, puoi ingrandire, ruotare, ma non puoi modificarla.
+</div>
+
+<p><strong>Compiti:</strong></p>
+<ul>
+  <li>Caricare e visualizzare file STL nel browser</li>
+  <li>Rotazione, zoom, pan col mouse</li>
+  <li>Illuminazione realistica per vedere bene i dettagli</li>
+  <li>Mostrare le linee AI sovrapposte al modello</li>
+  <li>Mostrare i punti di controllo trascinabili</li>
+</ul>
+
+<!-- LAYER 2 -->
+<h2>Layer 2 — Modulo AI</h2>
+<p>È il <strong>cervello</strong> che analizza il modello e decide dove tagliare.</p>
+
+<div class="box box-blue">
+<strong>Analogia:</strong> È come un dentista esperto che guarda il modello e dice "il taglio va qui, lungo questa linea". Solo che è un algoritmo, non una persona.
+</div>
+
+<p><strong>Compiti:</strong></p>
+<ul>
+  <li><strong>Fase 1 (geometrica):</strong> Analizza la curvatura della superficie → trova gli impianti (cilindri) → traccia la linea naturale tra loro</li>
+  <li><strong>Fase 2 (ML):</strong> Un modello di machine learning addestrato sui tuoi STL → impara pattern specifici → tagli sempre più precisi</li>
+</ul>
+
+<!-- LAYER 3 -->
+<h2>Layer 3 — Kernel CAD</h2>
+<p>È il <strong>motore matematico</strong> che fa i calcoli pesanti — piani, curve, tagli, booleane.</p>
+
+<div class="box box-blue">
+<strong>Analogia:</strong> È il motore di un'auto — tu giri il volante e premi l'acceleratore (interfaccia), ma il motore fa tutto il lavoro pesante di spostare la macchina (calcoli matematici).
+</div>
+
+<p><strong>Compiti:</strong></p>
+<ul>
+  <li>Proiettare curve sulla superficie dell'STL</li>
+  <li>Creare superfici NURBS (curve e piani matematici lisci)</li>
+  <li>Eseguire operazioni booleane (tagliare un volume con un altro)</li>
+  <li>Gestire la parametricità (cambi un valore → tutto si ricalcola)</li>
+  <li>Esportare il risultato in STL</li>
+</ul>
+
+<!-- LAYER 4 -->
+<h2>Layer 4 — Editore Parametrico</h2>
+<p>È l'<strong>interfaccia interattiva</strong> — ciò che tocchi e modifichi col mouse.</p>
+
+<div class="box box-blue">
+<strong>Analogia:</strong> È il volante, i pedali e la strumentazione dell'auto — ciò che usi per controllare il motore (Layer 3) e vedere cosa succede sullo schermo (Layer 1).
+</div>
+
+<p><strong>Compiti:</strong></p>
+<ul>
+  <li>Punti di controllo trascinabili ancorati alla superficie</li>
+  <li>Ricalcolo in tempo reale delle curve quando trascini</li>
+  <li>Slider per lo spessore del piano di taglio</li>
+  <li>Selettore profili (ovale, D-shape, rettangolare, custom)</li>
+  <li>Anteprima del taglio prima di confermare</li>
+</ul>
+
+<!-- LAYER 5 -->
+<h2>Layer 5 — Orchestratore AI</h2>
+<p>È il <strong>direttore d'orchestra</strong> che coordina tutto — lato server.</p>
+
+<div class="box box-blue">
+<strong>Analogia:</strong> È il manager di un ristorante — non cucina, non serve ai tavoli, ma coordina cuoco, camerieri e cassa. Fa sapere a ogni parte cosa fare e quando.
+</div>
+
+<p><strong>Compiti:</strong></p>
+<ul>
+  <li>Riceve l'STL dal browser e lo analizza</li>
+  <li>Invia comandi CAD a FreeCAD/OpenSCAD tramite MCP</li>
+  <li>Memorizza i tagli effettuati → impara per i successivi</li>
+  <li>Gestisce la pipeline ML per l'analisi avanzata</li>
+  <li>Coordina i calcoli pesanti server-side quando il browser non basta</li>
+</ul>
+
+<div class="page-break"></div>
+
+<!-- ============ 5. STRUMENTI ============ -->
+<h1 id="strumenti">5. Gli Strumenti</h1>
+
+<p>Ogni strumento che usiamo, spiegato in modo semplice.</p>
+
+<!-- THREE.JS / R3F -->
+<div class="tool-card">
+  <div class="tool-header">
+    <span class="tool-name">Three.js + React Three Fiber (R3F)</span>
+    <span class="tool-type">Layer 1 — Viewer</span>
+  </div>
+  <p><strong>Cosa è:</strong> Three.js è una libreria JavaScript per mostrare grafica 3D nel browser. React Three Fiber è la versione che funziona con React — lo stesso motore, ma più facile da usare in un progetto Next.js.</p>
+  <p><strong>Come funziona:</strong> Comunicando direttamente con la scheda video del tuo computer tramite WebGL, trasforma dati matematici (coordinate di triangoli) in immagini 3D che vedi sullo schermo. Tu scrivi componenti React come &lt;mesh&gt; e &lt;light&gt;, e R3F fa il resto.</p>
+  <div class="tool-example">
+    <span class="example-label">💡 Esempio pratico</span>
+    Immagina di voler mostrare un cubo ruotabile nel browser:<br><br>
+    // Senza R3F (Three.js puro) — 15 righe di codice imperativo:<br>
+    const scene = new THREE.Scene();<br>
+    const camera = new THREE.PerspectiveCamera(75, ...);<br>
+    const renderer = new THREE.WebGLRenderer();<br>
+    const geometry = new THREE.BoxGeometry();<br>
+    const material = new THREE.MeshStandardMaterial();<br>
+    const cube = new THREE.Mesh(geometry, material);<br>
+    scene.add(cube);<br>
+    renderer.render(scene, camera);<br><br>
+    // Con R3F — 5 righe dichiarative, stile React:<br>
+    &lt;Canvas&gt;<br>
+    &nbsp;&nbsp;&lt;ambientLight /&gt;<br>
+    &nbsp;&nbsp;&lt;mesh&gt;<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&lt;boxGeometry /&gt;<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&lt;meshStandardMaterial color="blue" /&gt;<br>
+    &nbsp;&nbsp;&lt;/mesh&gt;<br>
+    &lt;/Canvas&gt;
+  </div>
+  <p><strong>Nel progetto:</strong> Mostra il modello STL, gestisce rotazione/zoom, visualizza linee di taglio e punti di controllo.</p>
+</div>
+
+<!-- DREI -->
+<div class="tool-card">
+  <div class="tool-header">
+    <span class="tool-name">Drei</span>
+    <span class="tool-type">Layer 1 — Helper</span>
+  </div>
+  <p><strong>Cosa è:</strong> Una raccolta di componenti pronti per R3F. È come una "cassetta degli attrezzi" — altrimenti dovresti scrivere tutto da zero.</p>
+  <p><strong>Come funziona:</strong> Offre componenti pre-costruiti per cose comuni: controlli camera, caricamento file, ombre, griglie, ecc.</p>
+  <div class="tool-example">
+    <span class="example-label">💡 Esempio pratico</span>
+    Per caricare un file STL e poterlo ruotare col mouse:<br><br>
+    // Senza Drei: devi scrivere STLLoader, OrbitControls, gestire errori...<br>
+    // Con Drei:<br>
+    &lt;Canvas&gt;<br>
+    &nbsp;&nbsp;&lt;Suspense fallback={&lt;p&gt;Caricamento...&lt;/p&gt;}&gt;<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&lt;STLModel url="/modello.stl" /&gt;  {/* Carica STL */}<br>
+    &nbsp;&nbsp;&lt;/Suspense&gt;<br>
+    &nbsp;&nbsp;&lt;OrbitControls /&gt;  {/* Ruota col mouse */}<br>
+    &lt;/Canvas&gt;
+  </div>
+  <p><strong>Nel progetto:</strong> STLLoader (carica i file), OrbitControls (gira col mouse), ContactShadows (ombre realistiche), Environment (illuminazione HDRI).</p>
+</div>
+
+<!-- OCCT.JS -->
+<div class="tool-card">
+  <div class="tool-header">
+    <span class="tool-name">OpenCascade.js (OCCT.js)</span>
+    <span class="tool-type">Layer 3 — Kernel CAD</span>
+  </div>
+  <p><strong>Cosa è:</strong> È il motore CAD più potente open-source al mondo (OpenCascade), compilato per girare nel browser tramite WebAssembly (WASM). È lo stesso motore che usano FreeCAD, CadQuery e molti software CAD professionali.</p>
+  <p><strong>Come funziona:</strong> WebAssembly è come un "mini-computer dentro il browser" — permette di eseguire codice C++ veloce direttamente nella pagina web, senza server. OpenCascade.js scarica un file da ~30MB che contiene tutto il motore CAD, e poi fa i calcoli localmente nel tuo browser.</p>
+  <div class="tool-example">
+    <span class="example-label">💡 Esempio pratico</span>
+    Immagina di voler tagliare un cilindro con un piano:<br><br>
+    // Crei un cilindro (il ponte dentale)<br>
+    const cyl = occ.makeCylinder(5, 20);<br><br>
+    // Crei un piano di taglio<br>
+    const plane = occ.makePlane(origin, normal);<br><br>
+    // Tagli il cilindro col piano → ottieni 2 parti<br>
+    const [top, bottom] = occ.cut(cyl, plane);<br><br>
+    // Esporti le 2 parti come STL<br>
+    const stlTop = occ.writeSTL(top);<br>
+    const stlBottom = occ.writeSTL(bottom);
+  </div>
+  <p><strong>Nel progetto:</strong> Proietta le linee AI sulla superficie STL, crea il piano NURBS parametrico, esegue il taglio booleano, esporta le parti separate.</p>
+  <div class="box box-yellow">
+  <strong>⚠️ Nota:</strong> 30MB di download iniziale e calcoli lenti per modelli complessi. Per la prima versione è accettabile — se sarà troppo lento, spostiamo i calcoli sul server con FreeCAD MCP.
+  </div>
+</div>
+
+<!-- NURBS -->
+<div class="tool-card">
+  <div class="tool-header">
+    <span class="tool-name">NURBS (Non-Uniform Rational B-Splines)</span>
+    <span class="tool-type">Layer 3+4 — Curve e superfici</span>
+  </div>
+  <p><strong>Cosa sono:</strong> È il tipo di curva che usano tutti i software CAD per rappresentare forme lisce e modificabili. Non sono un software — sono un formato matematico.</p>
+  <p><strong>Come funzionano:</strong> Una curva NURBS è definita da <strong>punti di controllo</strong> (che puoi trascinare) e pesi (quanto la curva è attratta da ogni punto). Muovi un punto → la curba si ridisegna fluidamente.</p>
+  <div class="tool-example">
+    <span class="example-label">💡 Esempio pratico</span>
+    Immagina un elastico teso tra 5 chiodi su una tavola:<br><br>
+    • I chiodi = punti di controllo<br>
+    • L'elastico = la curva NURBS<br>
+    • Sposti un chiodo → l'elastico si riforma<br><br>
+    Nel nostro caso:<br>
+    • I "chiodi" sono le sfere che trascini col mouse sulla superficie STL<br>
+    • La "curva" è la linea di taglio che l'AI ha proposto<br>
+    • Sposti un punto → la linea si aggiorna in tempo reale
+  </div>
+  <p><strong>Nel progetto:</strong> Le linee di taglio e il piano di taglio sono tutti NURBS — questo permette la modifica interattiva trascinando punti.</p>
+</div>
+
+<!-- RAYCASTING -->
+<div class="tool-card">
+  <div class="tool-header">
+    <span class="tool-name">Raycasting</span>
+    <span class="tool-type">Layer 4 — Interazione</span>
+  </div>
+  <p><strong>Cosa è:</strong> Una tecnica per capire "cosa sto puntando" in una scena 3D. È come puntare un laser — lanci un raggio invisibile dal mouse e vedi dove colpisce il modello.</p>
+  <p><strong>Come funziona:</strong> Quando muovi il mouse, Three.js lancia una linea invisibile (raggio) dallo schermo verso il modello 3D. Dove il raggio tocca la superficie, ottieni le coordinate 3D esatte. Così sai dove ancorare i punti di controllo.</p>
+  <div class="tool-example">
+    <span class="example-label">💡 Esempio pratico</span>
+    Vuoi che un punto si attacchi alla superficie dell'STL quando lo trascini:<br><br>
+    1. L'utente trascina il punto col mouse<br>
+    2. Raycasting lancia un raggio dalla posizione del mouse<br>
+    3. Il raggio colpisce la superficie dell'STL al punto (x=12, y=5, z=8)<br>
+    4. Il punto di controllo si "attacca" a quelle coordinate<br>
+    5. La curva NURBS si ricalcola passando per il nuovo punto
+  </div>
+  <p><strong>Nel progetto:</strong> Permette ai punti di controllo di "ancorarsi" alla superficie del modello quando li trascini — non fluttuano nel vuoto, restano attaccati all'STL.</p>
+</div>
+
+<!-- FREECAD MCP -->
+<div class="tool-card">
+  <div class="tool-header">
+    <span class="tool-name">FreeCAD MCP</span>
+    <span class="tool-type">Layer 5 — CAD server-side</span>
+  </div>
+  <p><strong>Cosa è:</strong> Un ponte che collega l'AI (Claude, Hermes) a FreeCAD — il software CAD open-source più diffuso. MCP sta per "Model Context Protocol" — è il linguaggio che le AI usano per parlare con strumenti esterni.</p>
+  <p><strong>Come funziona:</strong> FreeCAD MCP gira sul server come un "cameriere" — l'AI manda una richiesta ("crea un cilindro di raggio 5mm"), il cameriere la passa a FreeCAD, FreeCAD esegue, e il cameriere riporta il risultato all'AI.</p>
+  <div class="tool-example">
+    <span class="example-label">💡 Esempio pratico</span>
+    Flusso reale nel nostro progetto:<br><br>
+    1. L'utente nel browser conferma il piano di taglio<br>
+    2. L'app web manda il piano all'API del server<br>
+    3. Hermes (AI orchestratore) riceve la richiesta<br>
+    4. Hermes → FreeCAD MCP: "Taglia questo STL con questo piano NURBS"<br>
+    5. FreeCAD esegue l'operazione booleana<br>
+    6. FreeCAD MCP → Hermes: "Ecco i 2 STL risultanti"<br>
+    7. Hermes → API → Browser: "Ecco le 2 parti da scaricare"
+  </div>
+  <p><strong>Nel progetto:</strong> Calcoli CAD pesanti che il browser non può gestire (modelli molto complessi, booleane avanzate). Alternativa server-side a OpenCascade.js.</p>
+</div>
+
+<!-- OPENSCAD MCP -->
+<div class="tool-card">
+  <div class="tool-header">
+    <span class="tool-name">OpenSCAD MCP</span>
+    <span class="tool-type">Layer 5 — CAD parametrico server-side</span>
+  </div>
+  <p><strong>Cosa è:</strong> Simile a FreeCAD MCP, ma per OpenSCAD — un CAD dove il design è scritto come codice (non disegnato con il mouse). L'AI scrive codice → OpenSCAD lo renderizza → produce STL.</p>
+  <p><strong>Come funziona:</strong> L'AI genera un file di testo con comandi OpenSCAD. Il server esegue OpenSCAD che trasforma il codice in un modello 3D. È particolarmente adatto per l'AI perché l'AI sa scrivere codice molto bene.</p>
+  <div class="tool-example">
+    <span class="example-label">💡 Esempio pratico</span>
+    L'AI genera questo codice per un profilo di taglio ovale:<br><br>
+    // Profilo parametrico per il cutter<br>
+    module profilo_taglio(raggio_x=8, raggio_y=5, spessore=2) {<br>
+    &nbsp;&nbsp;linear_extrude(height=spessore)<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;ellipse(raggio_x, raggio_y);<br>
+    }<br><br>
+    // L'AI cambia i parametri → il profilo si ricalcola<br>
+    profilo_taglio(raggio_x=10, raggio_y=6, spessore=1.5);
+  </div>
+  <p><strong>Nel progetto:</strong> Generare i profili parametrici (ovale, D-shape, rettangolare) — l'AI scrive il codice, OpenSCAD produce la geometria, l'utente sceglie dal menu.</p>
+</div>
+
+<!-- THREE-MESH-BVH -->
+<div class="tool-card">
+  <div class="tool-header">
+    <span class="tool-name">three-mesh-bvh</span>
+    <span class="tool-type">Layer 2 — Analisi mesh</span>
+  </div>
+  <p><strong>Cosa è:</strong> Una libreria che rende le query su mesh STL velocissime. BVH sta per "Bounding Volume Hierarchy" — una struttura dati che organizza i triangoli come un albero per cercare velocemente.</p>
+  <p><strong>Come funziona:</strong> Immagina di cercare una parola nel dizionario: senza ordine controlli tutte le pagine (lento). Con l'ordine alfabetico, apri a metà, vedi se è prima o dopo, e restringi (veloce). BVH fa lo stesso con i triangoli 3D — organizza i dati così le query sono istantanee.</p>
+  <div class="tool-example">
+    <span class="example-label">💡 Esempio pratico</span>
+    Un STL dentale ha ~500.000 triangoli. Senza BVH:<br>
+    • "Quali triangoli sono vicini al punto X?" → controlla tutti 500.000 → 2 secondi<br><br>
+    Con BVH:<br>
+    • La stessa query → controlla solo ~50 triangoli → 2 millisecondi<br><br>
+    Questo rende possibile il raycasting in tempo reale e l'analisi di curvatura.
+  </div>
+  <p><strong>Nel progetto:</strong> Raycasting veloce (drag points ancorati), analisi di curvatura in tempo reale, rilevamento feature (impianti, solchi).</p>
+</div>
+
+<!-- HERMES -->
+<div class="tool-card">
+  <div class="tool-header">
+    <span class="tool-name">Hermes (Orchestratore AI)</span>
+    <span class="tool-type">Layer 5 — Coordinamento</span>
+  </div>
+  <p><strong>Cosa è:</strong> È l'AI che uso io — l'assistente che stai usando ora. Può coordinare altri AI, usare strumenti, memorizzare informazioni, e operare autonomamente.</p>
+  <p><strong>Come funziona:</strong> Hermes ha accesso a terminali, browser, API, MCP server, e può delegare compiti ad agenti specializzati. Può anche programmare azioni automatiche (cron) e ricordare ciò che ha imparato.</p>
+  <div class="tool-example">
+    <span class="example-label">💡 Esempio pratico</span>
+    Nel nostro progetto, Hermes fa da coordinatore:<br><br>
+    1. Riceve la richiesta: "Taglia questo ponte STL"<br>
+    2. Delega l'analisi → Claude Code scrive il codice di feature detection<br>
+    3. Delega il calcolo → FreeCAD MCP esegue il taglio booleano<br>
+    4. Memorizza il risultato → la prossima volta propone tagli simili<br>
+    5. Se il calcolo è pesante → lo programma di notte (cron)
+  </div>
+  <p><strong>Nel progetto:</strong> Orchestrare tutta la pipeline — riceve l'STL, coordina analisi e calcoli, memorizza i pattern, coordina FreeCAD/OpenSCAD MCP.</p>
+</div>
+
+<!-- CLAUDE CODE -->
+<div class="tool-card">
+  <div class="tool-header">
+    <span class="tool-name">Claude Code</span>
+    <span class="tool-type">Sviluppo — Scrive il codice</span>
+  </div>
+  <p><strong>Cosa è:</strong> Un agente AI che vive dentro VSCode e scrive codice. Non è un chatbot — è un programmatore AI che legge, scrive, modifica file, esegue comandi, e risolve problemi nel tuo progetto.</p>
+  <p><strong>Come funziona:</strong> Gli dici cosa vuoi ("crea un componente React che mostra un modello STL"), lui legge i file del progetto, scrive il codice, lo testa, e lo corregge se necessario. Lavora nel contesto del tuo progetto — sa cosa c'è già e cosa manca.</p>
+  <div class="tool-example">
+    <span class="example-label">💡 Esempio pratico</span>
+    Tu: "Crea un viewer STL che carica il file dal percorso /models e mostra orbit controls"<br><br>
+    Claude Code:<br>
+    1. Legge il progetto → capisce che usa Next.js + TypeScript + Tailwind<br>
+    2. Crea src/components/stl-viewer.tsx con R3F + Drei<br>
+    3. Aggiunge le dipendenze npm (three, @react-three/fiber, @react-three/drei)<br>
+    4. Testa → corregge eventuali errori TypeScript<br>
+    5. Mostra il risultato
+  </div>
+  <p><strong>Nel progetto:</strong> Scrive TUTTO il codice — frontend, backend, integrazione OCCT.js, editor parametrico, API. È il tuo sviluppatore AI.</p>
+</div>
+
+<div class="page-break"></div>
+
+<!-- ============ 6. LE FASI ============ -->
+<h1 id="fasi">6. Le Fasi — Piano di Sviluppo</h1>
+
+<p>Ogni fase produce qualcosa di funzionante. Non costruiamo tutto subito — partiamo dalle fondamenta e aggiungiamo.</p>
+
+<div class="phase">
+  <div class="phase-num">1</div>
+  <div class="phase-content">
+    <h3>STL Viewer + Rilevamento Impianti</h3>
+    <p>Importi un STL → vedi il modello 3D → il sistema individua automaticamente i cilindri (impianti dentali) e li evidenzia.</p>
+    <p><strong>Strumenti:</strong> Claude Code, R3F, Drei, three-mesh-bvh</p>
+    <p><strong>Risultato:</strong> Una pagina web dove carichi un STL e vedi gli impianti evidenziati in rosso</p>
+    <div class="phase-meta">
+      <span>⏱ 1 settimana</span>
+      <span>🧑‍💻 Claude Code</span>
+      <span>📋 Layer 1+2</span>
+    </div>
+  </div>
+</div>
+
+<div class="phase">
+  <div class="phase-num">2</div>
+  <div class="phase-content">
+    <h3>Linee di Taglio Geometriche</h3>
+    <p>L'AI traccia linee di taglio sulla superficie — partendo dagli impianti rilevati, calcola il percorso naturale di separazione tra le due parti del ponte.</p>
+    <p><strong>Strumenti:</strong> Claude Code, algoritmi di curvatura, NURBS</p>
+    <p><strong>Risultato:</strong> Linee colorate sovrapposte al modello STL — la proposta dell'AI</p>
+    <div class="phase-meta">
+      <span>⏱ 1 settimana</span>
+      <span>🧑‍💻 Claude Code</span>
+      <span>📋 Layer 2</span>
+    </div>
+  </div>
+</div>
+
+<div class="phase">
+  <div class="phase-num">3</div>
+  <div class="phase-content">
+    <h3>Piano Parametrico con OpenCascade.js</h3>
+    <p>Le linee diventano un vero piano di taglio 3D — una superficie NURBS con spessore. OpenCascade.js nel browser esegue i calcoli matematici.</p>
+    <p><strong>Strumenti:</strong> Claude Code, OpenCascade.js (WASM)</p>
+    <p><strong>Risultato:</strong> Un piano di taglio visibile nel viewer, con spessore regolabile</p>
+    <div class="phase-meta">
+      <span>⏱ 2 settimane</span>
+      <span>🧑‍💻 Claude Code</span>
+      <span>📋 Layer 3</span>
+    </div>
+  </div>
+</div>
+
+<div class="phase">
+  <div class="phase-num">4</div>
+  <div class="phase-content">
+    <h3>Editor Interattivo — Drag Points</h3>
+    <p>Punti di controllo trascinabili sulla superficie. Trascini un punto → la curva si aggiorna → il piano si ricalcola → vedi l'anteprima del taglio aggiornata.</p>
+    <p><strong>Strumenti:</strong> Claude Code, R3F, raycasting</p>
+    <p><strong>Risultato:</strong> Puoi modificare il piano di taglio col mouse in tempo reale</p>
+    <div class="phase-meta">
+      <span>⏱ 1 settimana</span>
+      <span>🧑‍💻 Claude Code</span>
+      <span>📋 Layer 4</span>
+    </div>
+  </div>
+</div>
+
+<div class="phase">
+  <div class="phase-num">5</div>
+  <div class="phase-content">
+    <h3>Spessore Parametrico + Taglio Booleano</h3>
+    <p>Uno slider per lo spessore (0.5mm → 3mm). Il sistema esegue il taglio booleano — divide l'STL in 2 parti separate e le mostra in anteprima.</p>
+    <p><strong>Strumenti:</strong> FreeCAD MCP (server-side), OpenCascade.js (browser fallback)</p>
+    <p><strong>Risultato:</strong> Vedi le 2 parti del ponte separate — sopra e sotto</p>
+    <div class="phase-meta">
+      <span>⏱ 1 settimana</span>
+      <span>🧑‍💻 Claude Code + Hermes</span>
+      <span>📋 Layer 3+5</span>
+    </div>
+  </div>
+</div>
+
+<div class="phase">
+  <div class="phase-num">6</div>
+  <div class="phase-content">
+    <h3>Libreria Profili</h3>
+    <p>Menu con profili selezionabili: ovale, D-shape, rettangolare, custom. L'AI genera il codice per ogni profilo, l'utente sceglie e il piano si adatta.</p>
+    <p><strong>Strumenti:</strong> OpenSCAD MCP, Claude Code</p>
+    <p><strong>Risultato:</strong> Menu dropdown → scegli il profilo → il piano cambia forma</p>
+    <div class="phase-meta">
+      <span>⏱ 1 settimana</span>
+      <span>🧑‍💻 Claude Code + Hermes</span>
+      <span>📋 Layer 4+5</span>
+    </div>
+  </div>
+</div>
+
+<div class="phase">
+  <div class="phase-num">7</div>
+  <div class="phase-content">
+    <h3>Pipeline Completa Hermes</h3>
+    <p>Hermes coordina tutto: riceve l'STL → analizza → propone taglio → esegue calcoli → ritorna risultati. Memorizza i pattern per migliorare.</p>
+    <p><strong>Strumenti:</strong> Hermes, FreeCAD MCP, OpenSCAD MCP</p>
+    <p><strong>Risultato:</strong> Pipeline end-to-end funzionante — dal caricamento all'export</p>
+    <div class="phase-meta">
+      <span>⏱ 1 settimana</span>
+      <span>🧑‍💻 Hermes + Claude Code</span>
+      <span>📋 Layer 5</span>
+    </div>
+  </div>
+</div>
+
+<div class="phase">
+  <div class="phase-num">8</div>
+  <div class="phase-content">
+    <h3>Machine Learning — Tagli Intelligenti</h3>
+    <p>Un modello ML addestrato sui tuoi STL annotati. Impara dai tagli effettuati → propone tagli sempre più precisi. Richiede i tuoi dati STL.</p>
+    <p><strong>Strumenti:</strong> Python, PyTorch, ONNX Runtime Web</p>
+    <p><strong>Risultato:</strong> L'AI impara dai tuoi tagli — ogni ponte è più preciso del precedente</p>
+    <div class="phase-meta">
+      <span>⏱ 2-4 settimane</span>
+      <span>🧑‍💻 Hermes + Python pipeline</span>
+      <span>📋 Layer 2+5</span>
+    </div>
+  </div>
+</div>
+
+<div class="box box-green">
+<strong>Totale stimato: ~8-10 settimane</strong> delegando quasi tutto ad AI. Ogni fase produce qualcosa di testabile — non devi aspettare la fine per vedere risultati.
+</div>
+
+<div class="page-break"></div>
+
+<!-- ============ 7. STRATEGIA AI ============ -->
+<h1 id="ai-strategy">7. Strategia AI — Chi fa cosa</h1>
+
+<div class="diagram">
+┌─────────────────────────────────────────────────────────────┐
+│                CHI FA COSA NEL PROGETTO                     │
+├──────────────────┬──────────────────────────────────────────┤
+│                  │                                          │
+│  CLAUDE CODE     │  Scrive TUTTO il codice                  │
+│  (VSCode)        │  Frontend, backend, integrazioni         │
+│                  │  È il programmatore AI                    │
+│                  │                                          │
+├──────────────────┼──────────────────────────────────────────┤
+│                  │                                          │
+│  HERMES          │  Coordina la pipeline                    │
+│  (VPS)           │  FreeCAD MCP, OpenSCAD MCP               │
+│                  │  Memorizza pattern, programma cron        │
+│                  │  È il manager del progetto                │
+│                  │                                          │
+├──────────────────┼──────────────────────────────────────────┤
+│                  │                                          │
+│  TU              │  Decidi, validi, fornisci STL            │
+│  (Browser)       │  Testi i risultati                       │
+│                  │  Sei il dentista / cliente finale         │
+│                  │                                          │
+└──────────────────┴──────────────────────────────────────────┘</div>
+
+<h2>Come delegare a Claude Code</h2>
+
+<p>Claude Code lavora nel tuo progetto locale (VSCode). Gli dai istruzioni chiare e lui scrive il codice. Le istruzioni migliori sono:</p>
+
+<div class="box box-green">
+<strong>Formula per un buon prompt a Claude Code:</strong><br><br>
+1. <strong>CONTESTO</strong> — cosa stiamo costruendo (questa guida glielo spiega)<br>
+2. <strong>OBIETTIVO</strong> — cosa deve fare in questa fase<br>
+3. <strong>STRUMENTI</strong> — quali librerie usare (R3F, OCCT.js, ecc.)<br>
+4. <strong>CONSTRAINTS</strong> — cosa NON fare (es. "non usare alert()")<br>
+5. <strong>OUTPUT</strong> — cosa vuoi ottenere alla fine (es. "un componente React")
+</div>
+
+<div class="tool-example">
+  <span class="example-label">💡 Esempio di prompt per la Fase 1</span>
+  <br>
+  "Sto costruendo un tool web per tagliare ponti dentali STL.<br><br>
+  Obiettivo: Crea un viewer STL che:<br>
+  1. Carica un file STL tramite drag-and-drop<br>
+  2. Mostra il modello 3D con rotazione/zoom/pan<br>
+  3. Illuminazione realistica con ombre<br>
+  4. Individua i cilindri nella mesh (impianti dentali) e li evidenzia<br><br>
+  Usa: React Three Fiber + Drei + three-mesh-bvh<br>
+  Stack: Next.js 14 + TypeScript + Tailwind CSS + shadcn/ui<br>
+  Non usare: alert(), any, componenti non accessibili"
+</div>
+
+<h2>Come delegare a Hermes</h2>
+
+<p>Hermes (io) opera sul VPS e coordina i tool server-side:</p>
+
+<div class="diagram">
+┌────────────────────────────────────────────────────────┐
+│             HERMES — FLUSSO LAVORO                      │
+│                                                        │
+│  1. Ricevo STL dall'API del gestionale                 │
+│              ↓                                         │
+│  2. Analizzo con feature detection geometrica         │
+│              ↓                                         │
+│  3. Mando comandi a FreeCAD MCP:                       │
+│     "Crea piano di taglio NURBS, taglia STL"          │
+│              ↓                                         │
+│  4. FreeCAD esegue → ritorna 2 STL                    │
+│              ↓                                         │
+│  5. Memorizzo il pattern nel fact_store                │
+│     (così la prossima volta propongo tagli simili)     │
+│              ↓                                         │
+│  6. Ritorno i risultati all'API → browser             │
+└────────────────────────────────────────────────────────┘</div>
+
+<div class="page-break"></div>
+
+<!-- ============ 8. GLOSSARIO ============ -->
+<h1 id="glossario">8. Glossario</h1>
+
+<p>Tutti i termini tecnici del progetto, spiegati in modo semplice.</p>
+
+<div class="glossary-item">
+  <span class="glossary-term">STL</span> — Formato file per modelli 3D. Contiene solo la "pelle" del modello — una rete di triangoli. È il formato standard delle scansioni dentali e della stampa 3D. Non contiene colore, materiale o informazioni CAD — solo geometria.
+</div>
+
+<div class="glossary-item">
+  <span class="glossary-term">Mesh</span> — La struttura interna di un file STL. È una rete di triangoli collegati che formano la superficie del modello. Più triangoli = più dettaglio = file più pesante. Un ponte dentale tipico: 100.000-500.000 triangoli.
+</div>
+
+<div class="glossary-item">
+  <span class="glossary-term">WASM (WebAssembly)</span> — Una tecnologia che permette di eseguire codice veloce (C, C++, Rust) dentro il browser. È come avere un mini-programma nativo che gira nella pagina web. Più veloce di JavaScript per calcoli pesanti. OpenCascade.js usa WASM per girare nel browser.
+</div>
+
+<div class="glossary-item">
+  <span class="glossary-term">Operazione booleana</span> — Un'operazione CAD che combina due forme: unione, sottrazione o intersezione. Nel nostro caso: SOTTRAIAMO il piano di taglio dal ponte per ottenere le 2 parti separate. Come usare un cookie cutter nell'impasto.
+</div>
+
+<div class="glossary-item">
+  <span class="glossary-term">NURBS</span> — Vedi sezione strumenti. Curve e superfici matematiche lisce, definite da punti di controllo. Standard de facto nei CAD.
+</div>
+
+<div class="glossary-item">
+  <span class="glossary-term">MCP (Model Context Protocol)</span> — Un protocollo standard che permette alle AI (Claude, Hermes) di comunicare con strumenti esterni. È come una presa elettrica standard — qualsiasi strumento che usa MCP si può collegare a qualsiasi AI che supporta MCP.
+</div>
+
+<div class="glossary-item">
+  <span class="glossary-term">Parametrico</span> — Un design definito da parametri (numeri) anziché da forme fisse. Cambi un numero → tutto si ricalcola. Esempio: "raggio=5" → se cambi a "raggio=7", ogni curva e superficie che dipende da quel raggio si aggiorna automaticamente.
+</div>
+
+<div class="glossary-item">
+  <span class="glossary-term">Feature detection</span> — L'analisi automatica di un modello per trovare caratteristiche rilevanti: cilindri, piani, fori, spigoli. Nel nostro caso: trovare gli impianti (cilindri) e il solco tra le parti (cambio di curvatura).
+</div>
+
+<div class="glossary-item">
+  <span class="glossary-term">Curvatura</span> — Quanto una superficie è "curva" in un punto. Un piano piatto = curvatura zero. Una sfera = curvatura costante. Il solco tra due parti di un ponte = curvatura alta. L'AI usa la curvatura per capire dove tagliare.
+</div>
+
+<div class="glossary-item">
+  <span class="glossary-term">Raycasting</span> — Vedi sezione strumenti. Tecnica per "puntare" nella scena 3D e trovare le coordinate esatte sulla superficie.
+</div>
+
+<div class="glossary-item">
+  <span class="glossary-term">BVH (Bounding Volume Hierarchy)</span> — Vedi three-mesh-bvh nella sezione strumenti. Struttura dati per query veloci su mesh grandi.
+</div>
+
+<div class="glossary-item">
+  <span class="glossary-term">Kernel CAD</span> — Il motore matematico di un software CAD. Fa i calcoli veri — booleane, proiezioni, NURBS. È come il motore di un'auto: l'interfaccia è il volante, il kernel è il motore. OpenCascade è il kernel più diffuso open-source.
+</div>
+
+<div class="glossary-item">
+  <span class="glossary-term">WebGL</span> — La tecnologia del browser che permette grafica 3D. Three.js usa WebGL sotto il cofano. È come il "driver della scheda video" del browser.
+</div>
+
+<div class="glossary-item">
+  <span class="glossary-term">Ponte avvitato su impianti</span> — Una protesi dentale fissata con viti su impianti (cilindri di titanio avvitati nell'osso). Il nostro tool separa il ponte in 2 parti lungo il piano di taglio — la parte superiore (estetica) e la struttura (che si avvita sugli impianti).
+</div>
+
+<div class="glossary-item">
+  <span class="glossary-term">ONNX</span> — Formato per modelli ML portatili. Addestri il modello in Python (PyTorch), lo esporti in ONNX, e può girare nel browser con ONNX Runtime Web. È come salvare un video in MP4 — qualunque player lo legge.
+</div>
+
+<br><br>
+
+<div class="box box-blue" style="text-align: center; padding: 30px;">
+  <strong style="font-size: 1.2em;">📋 Prossimo passo</strong><br><br>
+  Iniziare dalla <strong>Fase 1</strong> — STL Viewer + Rilevamento Impianti<br>
+  Prompt pronto per Claude Code<br><br>
+  <em>Quando sei pronto, dì: "Iniziamo la Fase 1"</em>
+</div>
+
+</div>
+
+</body>
+</html>
