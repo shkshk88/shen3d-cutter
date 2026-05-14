@@ -5,9 +5,8 @@ import dynamic from 'next/dynamic'
 import { Button } from '@/components/ui/button'
 import { Slider } from '@/components/ui/slider'
 import { MeshAnalysisResult } from '@/lib/mesh-analysis'
-import * as THREE from 'three'
 import { useAnnotationTool } from './annotation-tool'
-import { AnnotationPoints } from './annotation-points'
+import * as THREE from 'three'
 
 const StlViewer = dynamic(
   () => import('./stl-viewer').then(mod => ({ default: mod.StlViewer })),
@@ -19,6 +18,11 @@ const StlViewer = dynamic(
       </div>
     ),
   }
+)
+
+const AnnotationPoints = dynamic(
+  () => import('./annotation-points').then(mod => ({ default: mod.AnnotationPoints })),
+  { ssr: false }
 )
 
 interface ViewerSectionProps {
@@ -35,6 +39,7 @@ export function ViewerSection({ analysisResult, onAnalysisResultChange, selected
   const [showCurvature, setShowCurvature] = useState(false)
   const [curvatureOpacity, setCurvatureOpacity] = useState(0.7)
   const [annotationMode, setAnnotationMode] = useState(false)
+  const [isAnalyzing, setIsAnalyzing] = useState(false)
 
   const annotationTool = useAnnotationTool()
 
@@ -48,6 +53,7 @@ export function ViewerSection({ analysisResult, onAnalysisResultChange, selected
     onImplantSelect(null)
     setShowCurvature(false)
     setAnnotationMode(false)
+    setIsAnalyzing(true)
   }, [onAnalysisResultChange, onImplantSelect])
 
   const handleDrop = useCallback((e: React.DragEvent) => {
@@ -61,10 +67,12 @@ export function ViewerSection({ analysisResult, onAnalysisResultChange, selected
     onImplantSelect(null)
     setShowCurvature(false)
     setAnnotationMode(false)
+    setIsAnalyzing(true)
   }, [onAnalysisResultChange, onImplantSelect])
 
   const handleAnalysisComplete = useCallback((result: MeshAnalysisResult) => {
     onAnalysisResultChange(result)
+    setIsAnalyzing(false)
   }, [onAnalysisResultChange])
 
   const handleMeshClick = useCallback((point: THREE.Vector3) => {
@@ -186,8 +194,18 @@ export function ViewerSection({ analysisResult, onAnalysisResultChange, selected
           </div>
         )}
 
-        {/* Annotation overlay */}
-        {annotationMode && stlUrl && (
+        {/* Loading overlay per analisi */}
+        {isAnalyzing && (
+          <div className="absolute top-4 right-4 bg-card border rounded-lg p-3 shadow-lg z-10">
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+              <span className="text-sm">Analisi in corso...</span>
+            </div>
+          </div>
+        )}
+
+        {/* Annotation points overlay */}
+        {annotationMode && stlUrl && annotationTool.state.points.length > 0 && (
           <AnnotationPoints points={annotationTool.state.points} />
         )}
       </div>
