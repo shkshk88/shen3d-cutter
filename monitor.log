@@ -1,7 +1,0 @@
-[2026-05-14 23:54:22] === Shen3D Monitor Started ===
-[2026-05-14 23:54:22] Rate limit wait: 300s, Max retries: 20
-[2026-05-14 23:54:22] Progress: Task 6: Visualizzazione curvatura (heat map)
-[2026-05-14 23:54:52] Progress: Task 7: Tool di annotazione
-[2026-05-14 23:56:52] Progress: Task 8: Info modello nella sidebar
-[2026-05-14 23:57:52] Progress: Task 9: Export annotazioni per training
-[2026-05-14 23:58:52] Progress: Task 10: Test e polish finale
