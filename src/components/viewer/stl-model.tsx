@@ -3,7 +3,7 @@
 import { useLoader } from '@react-three/fiber'
 import { STLLoader } from 'three-stdlib'
 import * as THREE from 'three'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { analyzeMesh, MeshAnalysisResult } from '@/lib/mesh-analysis'
 import { applyCurvatureColors } from './curvature-visualization'
 
@@ -12,9 +12,11 @@ interface StlModelProps {
   onAnalysisComplete?: (result: MeshAnalysisResult) => void
   showCurvature?: boolean
   curvatureOpacity?: number
+  annotationMode?: boolean
+  onMeshClick?: (point: THREE.Vector3) => void
 }
 
-export function StlModel({ url, onAnalysisComplete, showCurvature, curvatureOpacity }: StlModelProps) {
+export function StlModel({ url, onAnalysisComplete, showCurvature, curvatureOpacity, annotationMode, onMeshClick }: StlModelProps) {
   const geometry = useLoader(STLLoader, url)
   const meshRef = useRef<THREE.Mesh>(null)
   const [analysisData, setAnalysisData] = useState<MeshAnalysisResult | null>(null)
@@ -42,7 +44,6 @@ export function StlModel({ url, onAnalysisComplete, showCurvature, curvatureOpac
     onAnalysisComplete?.(result)
   }, [geometry])
 
-  // Applica o rimuovi heat map curvatura
   useEffect(() => {
     if (!analysisData || !geometry) return
 
@@ -60,8 +61,19 @@ export function StlModel({ url, onAnalysisComplete, showCurvature, curvatureOpac
 
   const hasVertexColors = showCurvature && !!geometry.getAttribute('color')
 
+  const handleClick = useCallback((e: THREE.Event & { point?: THREE.Vector3; stopPropagation?: () => void }) => {
+    if (annotationMode && onMeshClick && e.point) {
+      e.stopPropagation?.()
+      onMeshClick(e.point)
+    }
+  }, [annotationMode, onMeshClick])
+
   return (
-    <mesh ref={meshRef} geometry={geometry}>
+    <mesh
+      ref={meshRef}
+      geometry={geometry}
+      onClick={handleClick}
+    >
       <meshStandardMaterial
         color={hasVertexColors ? '#ffffff' : '#a0c4ff'}
         metalness={0.2}

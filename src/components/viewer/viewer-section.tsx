@@ -5,6 +5,9 @@ import dynamic from 'next/dynamic'
 import { Button } from '@/components/ui/button'
 import { Slider } from '@/components/ui/slider'
 import { MeshAnalysisResult } from '@/lib/mesh-analysis'
+import * as THREE from 'three'
+import { useAnnotationTool } from './annotation-tool'
+import { AnnotationPoints } from './annotation-points'
 
 const StlViewer = dynamic(
   () => import('./stl-viewer').then(mod => ({ default: mod.StlViewer })),
@@ -23,13 +26,17 @@ interface ViewerSectionProps {
   onAnalysisResultChange: (result: MeshAnalysisResult | null) => void
   selectedImplant: number | null
   onImplantSelect: (index: number | null) => void
+  onAnnotationSave?: () => void
 }
 
-export function ViewerSection({ analysisResult, onAnalysisResultChange, selectedImplant, onImplantSelect }: ViewerSectionProps) {
+export function ViewerSection({ analysisResult, onAnalysisResultChange, selectedImplant, onImplantSelect, onAnnotationSave }: ViewerSectionProps) {
   const [stlUrl, setStlUrl] = useState<string | null>(null)
   const [fileName, setFileName] = useState<string>('')
   const [showCurvature, setShowCurvature] = useState(false)
   const [curvatureOpacity, setCurvatureOpacity] = useState(0.7)
+  const [annotationMode, setAnnotationMode] = useState(false)
+
+  const annotationTool = useAnnotationTool()
 
   const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -40,6 +47,7 @@ export function ViewerSection({ analysisResult, onAnalysisResultChange, selected
     onAnalysisResultChange(null)
     onImplantSelect(null)
     setShowCurvature(false)
+    setAnnotationMode(false)
   }, [onAnalysisResultChange, onImplantSelect])
 
   const handleDrop = useCallback((e: React.DragEvent) => {
@@ -52,17 +60,35 @@ export function ViewerSection({ analysisResult, onAnalysisResultChange, selected
     onAnalysisResultChange(null)
     onImplantSelect(null)
     setShowCurvature(false)
+    setAnnotationMode(false)
   }, [onAnalysisResultChange, onImplantSelect])
 
   const handleAnalysisComplete = useCallback((result: MeshAnalysisResult) => {
     onAnalysisResultChange(result)
   }, [onAnalysisResultChange])
 
+  const handleMeshClick = useCallback((point: THREE.Vector3) => {
+    if (annotationMode) {
+      annotationTool.addPoint(point)
+    }
+  }, [annotationMode, annotationTool])
+
+  const handleSaveAnnotation = useCallback(() => {
+    if (!fileName) return
+    const result = annotationTool.save(
+      fileName,
+      analysisResult?.cylinderCandidates.length ?? 0
+    )
+    if (result) {
+      onAnnotationSave?.()
+    }
+  }, [annotationTool, fileName, analysisResult, onAnnotationSave])
+
   return (
     <div className="h-full flex flex-col">
       {/* Toolbar */}
-      <div className="h-12 border-b flex items-center px-4 gap-4 bg-card">
-        <span className="text-sm font-medium">{fileName || 'Nessun file caricato'}</span>
+      <div className="h-12 border-b flex items-center px-4 gap-4 bg-card overflow-x-auto">
+        <span className="text-sm font-medium whitespace-nowrap">{fileName || 'Nessun file caricato'}</span>
         <label className="cursor-pointer">
           <Button variant="outline" size="sm" onClick={() => document.getElementById('stl-upload')?.click()}>
             Carica STL
@@ -89,6 +115,28 @@ export function ViewerSection({ analysisResult, onAnalysisResultChange, selected
                   className="w-24"
                 />
               </div>
+            )}
+
+            <Button
+              variant={annotationMode ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setAnnotationMode(!annotationMode)}
+            >
+              Annota {annotationTool.state.points.length > 0 ? `(${annotationTool.state.points.length})` : ''}
+            </Button>
+
+            {annotationMode && (
+              <>
+                <Button variant="outline" size="xs" onClick={annotationTool.undoPoint} disabled={annotationTool.state.points.length === 0}>
+                  Undo
+                </Button>
+                <Button variant="outline" size="xs" onClick={annotationTool.clearPoints} disabled={annotationTool.state.points.length === 0}>
+                  Clear
+                </Button>
+                <Button variant="default" size="xs" onClick={handleSaveAnnotation} disabled={!annotationTool.canSave}>
+                  Salva
+                </Button>
+              </>
             )}
           </>
         )}
@@ -126,6 +174,8 @@ export function ViewerSection({ analysisResult, onAnalysisResultChange, selected
             onAnalysisComplete={handleAnalysisComplete}
             showCurvature={showCurvature}
             curvatureOpacity={curvatureOpacity}
+            annotationMode={annotationMode}
+            onMeshClick={handleMeshClick}
           />
         ) : (
           <div className="h-full flex items-center justify-center border-2 border-dashed rounded-lg m-4">
@@ -134,6 +184,11 @@ export function ViewerSection({ analysisResult, onAnalysisResultChange, selected
               <p className="text-sm text-muted-foreground mt-2">oppure clicca &quot;Carica STL&quot;</p>
             </div>
           </div>
+        )}
+
+        {/* Annotation overlay */}
+        {annotationMode && stlUrl && (
+          <AnnotationPoints points={annotationTool.state.points} />
         )}
       </div>
     </div>

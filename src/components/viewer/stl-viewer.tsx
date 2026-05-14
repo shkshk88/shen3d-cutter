@@ -2,7 +2,8 @@
 
 import { Canvas } from '@react-three/fiber'
 import { OrbitControls, ContactShadows } from '@react-three/drei'
-import { Suspense } from 'react'
+import { Suspense, useCallback } from 'react'
+import * as THREE from 'three'
 import { StlModel } from './stl-model'
 import { LoadingSpinner } from './loading-spinner'
 import { ImplantMarker } from './implant-marker'
@@ -16,17 +17,26 @@ interface StlViewerProps {
   onAnalysisComplete: (result: MeshAnalysisResult) => void
   showCurvature: boolean
   curvatureOpacity: number
+  annotationMode?: boolean
+  onMeshClick?: (point: THREE.Vector3) => void
 }
 
 export function StlViewer({
   url, analysisResult, selectedImplant, onImplantSelect, onAnalysisComplete,
-  showCurvature, curvatureOpacity
+  showCurvature, curvatureOpacity, annotationMode, onMeshClick
 }: StlViewerProps) {
+  const handleCanvasClick = useCallback((e: THREE.Event & { point?: THREE.Vector3 }) => {
+    if (annotationMode && onMeshClick && e.point) {
+      onMeshClick(e.point)
+    }
+  }, [annotationMode, onMeshClick])
+
   return (
     <Canvas
       camera={{ position: [0, 0, 100], fov: 50 }}
       gl={{ preserveDrawingBuffer: true }}
       className="bg-background"
+      onPointerMissed={undefined}
     >
       <ambientLight intensity={0.4} />
       <directionalLight position={[50, 50, 25]} intensity={1} castShadow />
@@ -38,6 +48,8 @@ export function StlViewer({
           onAnalysisComplete={onAnalysisComplete}
           showCurvature={showCurvature}
           curvatureOpacity={curvatureOpacity}
+          annotationMode={annotationMode}
+          onMeshClick={onMeshClick}
         />
       </Suspense>
 
