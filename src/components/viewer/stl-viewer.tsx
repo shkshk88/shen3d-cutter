@@ -5,12 +5,18 @@ import { OrbitControls, ContactShadows } from '@react-three/drei'
 import { Suspense } from 'react'
 import { StlModel } from './stl-model'
 import { LoadingSpinner } from './loading-spinner'
+import { ImplantMarker } from './implant-marker'
+import { MeshAnalysisResult } from '@/lib/mesh-analysis'
 
 interface StlViewerProps {
   url: string
+  analysisResult: MeshAnalysisResult | null
+  selectedImplant: number | null
+  onImplantSelect: (index: number | null) => void
+  onAnalysisComplete: (result: MeshAnalysisResult) => void
 }
 
-export function StlViewer({ url }: StlViewerProps) {
+export function StlViewer({ url, analysisResult, selectedImplant, onImplantSelect, onAnalysisComplete }: StlViewerProps) {
   return (
     <Canvas
       camera={{ position: [0, 0, 100], fov: 50 }}
@@ -22,8 +28,21 @@ export function StlViewer({ url }: StlViewerProps) {
       <directionalLight position={[-50, -50, -25]} intensity={0.3} />
 
       <Suspense fallback={<LoadingSpinner />}>
-        <StlModel url={url} />
+        <StlModel url={url} onAnalysisComplete={onAnalysisComplete} />
       </Suspense>
+
+      {analysisResult?.cylinderCandidates.map((cyl, i) => (
+        <ImplantMarker
+          key={i}
+          center={cyl.center}
+          axis={cyl.axis}
+          radius={cyl.radius}
+          confidence={cyl.confidence}
+          index={i}
+          isSelected={selectedImplant === i}
+          onClick={() => onImplantSelect(selectedImplant === i ? null : i)}
+        />
+      ))}
 
       <ContactShadows position={[0, -30, 0]} opacity={0.4} scale={100} blur={2} />
       <OrbitControls makeDefault enableDamping dampingFactor={0.1} />

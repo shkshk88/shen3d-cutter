@@ -4,13 +4,14 @@ import { useLoader } from '@react-three/fiber'
 import { STLLoader } from 'three-stdlib'
 import * as THREE from 'three'
 import { useEffect, useRef } from 'react'
+import { analyzeMesh, MeshAnalysisResult } from '@/lib/mesh-analysis'
 
 interface StlModelProps {
   url: string
-  onGeometryReady?: (geometry: THREE.BufferGeometry) => void
+  onAnalysisComplete?: (result: MeshAnalysisResult) => void
 }
 
-export function StlModel({ url, onGeometryReady }: StlModelProps) {
+export function StlModel({ url, onAnalysisComplete }: StlModelProps) {
   const geometry = useLoader(STLLoader, url)
   const meshRef = useRef<THREE.Mesh>(null)
 
@@ -31,7 +32,9 @@ export function StlModel({ url, onGeometryReady }: StlModelProps) {
     }
 
     geometry.computeVertexNormals()
-    onGeometryReady?.(geometry)
+
+    const result = analyzeMesh(geometry)
+    onAnalysisComplete?.(result)
   }, [geometry])
 
   return (
