@@ -3,8 +3,10 @@
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { downloadAnnotations } from '@/lib/export-annotations'
+import { downloadCuttingParams } from '@/lib/export-cutting'
 import { MeshAnalysisResult } from '@/lib/mesh-analysis'
 import { CuttingResult, CuttingPlane } from '@/lib/cutting-plane'
+import { PlaneParams } from '@/components/viewer/viewer-section'
 import * as THREE from 'three'
 
 interface SidebarProps {
@@ -15,6 +17,8 @@ interface SidebarProps {
   cuttingResult?: CuttingResult | null
   selectedPlaneId?: string | null
   onPlaneSelect?: (id: string | null) => void
+  fileName?: string
+  planeParams?: Record<string, PlaneParams>
 }
 
 function PlaneCard({ plane, selected, onClick }: {
@@ -54,7 +58,7 @@ function PlaneCard({ plane, selected, onClick }: {
   )
 }
 
-export function Sidebar({ analysisResult, selectedImplant, onImplantSelect, annotationCount = 0, cuttingResult, selectedPlaneId, onPlaneSelect }: SidebarProps) {
+export function Sidebar({ analysisResult, selectedImplant, onImplantSelect, annotationCount = 0, cuttingResult, selectedPlaneId, onPlaneSelect, fileName, planeParams }: SidebarProps) {
   const size = analysisResult?.boundingBox
     ? new THREE.Vector3()
     : null
@@ -143,7 +147,7 @@ export function Sidebar({ analysisResult, selectedImplant, onImplantSelect, anno
       <Separator />
 
       {/* Export annotazioni */}
-      <div className="p-4 border-t">
+      <div className="p-4 border-t space-y-2">
         <Button
           variant="outline"
           size="sm"
@@ -152,6 +156,19 @@ export function Sidebar({ analysisResult, selectedImplant, onImplantSelect, anno
           disabled={annotationCount === 0}
         >
           Export Annotazioni ({annotationCount})
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-full"
+          onClick={() => {
+            if (cuttingResult) {
+              downloadCuttingParams(cuttingResult, selectedPlaneId ?? null, fileName ?? '', planeParams ?? {})
+            }
+          }}
+          disabled={!cuttingResult || cuttingResult.planes.length === 0}
+        >
+          Export Parametri Taglio
         </Button>
       </div>
 

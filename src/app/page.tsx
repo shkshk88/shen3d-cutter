@@ -13,6 +13,7 @@ export default function Home() {
   const [cuttingResult, setCuttingResult] = useState<CuttingResult | null>(null)
   const [selectedPlaneId, setSelectedPlaneId] = useState<string | null>(null)
   const [planeParams, setPlaneParams] = useState<Record<string, PlaneParams>>({})
+  const [fileName, setFileName] = useState('')
 
   const handleAnnotationSave = useCallback(() => {
     setAnnotationCount(prev => prev + 1)
@@ -36,6 +37,8 @@ export default function Home() {
         cuttingResult={cuttingResult}
         selectedPlaneId={selectedPlaneId}
         onPlaneSelect={setSelectedPlaneId}
+        fileName={fileName}
+        planeParams={planeParams}
       />
       <main className="flex-1 overflow-hidden">
         <ViewerSection
@@ -50,6 +53,7 @@ export default function Home() {
           onPlaneSelect={setSelectedPlaneId}
           planeParams={planeParams}
           onPlaneParamsChange={setPlaneParams}
+          onFileNameChange={setFileName}
         />
       </main>
     </div>

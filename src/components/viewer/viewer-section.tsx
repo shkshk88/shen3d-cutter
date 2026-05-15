@@ -44,9 +44,10 @@ interface ViewerSectionProps {
   onPlaneSelect: (id: string | null) => void
   planeParams: Record<string, PlaneParams>
   onPlaneParamsChange: (params: Record<string, PlaneParams>) => void
+  onFileNameChange?: (name: string) => void
 }
 
-export function ViewerSection({ analysisResult, onAnalysisResultChange, selectedImplant, onImplantSelect, onAnnotationSave, cuttingResult, onCuttingResultChange, selectedPlaneId, onPlaneSelect, planeParams, onPlaneParamsChange }: ViewerSectionProps) {
+export function ViewerSection({ analysisResult, onAnalysisResultChange, selectedImplant, onImplantSelect, onAnnotationSave, cuttingResult, onCuttingResultChange, selectedPlaneId, onPlaneSelect, planeParams, onPlaneParamsChange, onFileNameChange }: ViewerSectionProps) {
   const [stlUrl, setStlUrl] = useState<string | null>(null)
   const [fileName, setFileName] = useState<string>('')
   const [showCurvature, setShowCurvature] = useState(false)
@@ -68,13 +69,14 @@ export function ViewerSection({ analysisResult, onAnalysisResultChange, selected
     const url = URL.createObjectURL(file)
     setStlUrl(url)
     setFileName(file.name)
+    onFileNameChange?.(file.name)
     onAnalysisResultChange(null)
     onImplantSelect(null)
     setShowCurvature(false)
     setAnnotationMode(false)
     setIsAnalyzing(true)
     onCuttingResultChange(null)
-  }, [onAnalysisResultChange, onImplantSelect])
+  }, [onAnalysisResultChange, onImplantSelect, onFileNameChange])
 
   const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
