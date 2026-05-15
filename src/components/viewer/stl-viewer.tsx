@@ -28,12 +28,13 @@ interface StlViewerProps {
   selectedPlaneId: string | null
   onPlaneSelect: (id: string | null) => void
   planeParams: Record<string, PlaneParams>
+  onPlaneParamsChange?: (params: Record<string, PlaneParams>) => void
 }
 
 export function StlViewer({
   url, analysisResult, selectedImplant, onImplantSelect, onAnalysisComplete,
   showCurvature, curvatureOpacity, annotationMode, onMeshClick,
-  cuttingResult, selectedPlaneId, onPlaneSelect, planeParams
+  cuttingResult, selectedPlaneId, onPlaneSelect, planeParams, onPlaneParamsChange
 }: StlViewerProps) {
   const geometryRef = useRef<THREE.BufferGeometry | null>(null)
   const [liveCutLines, setLiveCutLines] = useState<CutLine[]>([])
@@ -110,6 +111,7 @@ export function StlViewer({
           selectedPlaneId={selectedPlaneId}
           onPlaneSelect={onPlaneSelect}
           planeParams={planeParams}
+          onPlaneParamsChange={onPlaneParamsChange}
         />
       )}
 

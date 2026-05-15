@@ -256,6 +256,7 @@ export function ViewerSection({ analysisResult, onAnalysisResultChange, selected
             selectedPlaneId={selectedPlaneId}
             onPlaneSelect={onPlaneSelect}
             planeParams={planeParams}
+            onPlaneParamsChange={onPlaneParamsChange}
           />
         ) : (
           /* BIG upload area — the input IS the button */

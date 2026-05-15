@@ -1,8 +1,9 @@
 'use client'
 
 import { CuttingPlane, CuttingResult, applyPlaneParams } from '@/lib/cutting-plane'
-import { useMemo } from 'react'
+import { useMemo, useRef, useState, useCallback } from 'react'
 import * as THREE from 'three'
+import { ThreeEvent } from '@react-three/fiber'
 import { PlaneParams } from './viewer-section'
 
 interface CuttingPlaneVisualProps {
@@ -10,13 +11,15 @@ interface CuttingPlaneVisualProps {
   selectedPlaneId: string | null
   onPlaneSelect: (id: string | null) => void
   planeParams: Record<string, PlaneParams>
+  onPlaneParamsChange?: (params: Record<string, PlaneParams>) => void
 }
 
-function PlaneDisk({ plane, selected, onSelect, params }: {
+function PlaneDisk({ plane, selected, onSelect, params, onOffsetChange }: {
   plane: CuttingPlane
   selected: boolean
   onSelect: () => void
   params: PlaneParams
+  onOffsetChange: (offset: number) => void
 }) {
   const color = plane.method === 'junction' ? '#f59e0b' : '#10b981'
   const size = 20
@@ -42,12 +45,52 @@ function PlaneDisk({ plane, selected, onSelect, params }: {
     return m
   }, [effectivePlane])
 
+  const [dragging, setDragging] = useState(false)
+  const dragStart = useRef<{ pointOnNormal: number; offset: number } | null>(null)
+  const normalDir = useRef(effectivePlane.effectiveNormal.clone().normalize())
+
+  const projectOnNormal = useCallback((point: THREE.Vector3): number => {
+    return point.dot(normalDir.current)
+  }, [])
+
+  const onPointerDown = useCallback((e: ThreeEvent<PointerEvent>) => {
+    if (!selected) return
+    e.stopPropagation()
+    normalDir.current = effectivePlane.effectiveNormal.clone().normalize()
+    dragStart.current = { pointOnNormal: projectOnNormal(e.point), offset: params.offset }
+    setDragging(true)
+    ;(e.target as Element).setPointerCapture?.(e.pointerId)
+  }, [selected, effectivePlane, params.offset, projectOnNormal])
+
+  const onPointerMove = useCallback((e: ThreeEvent<PointerEvent>) => {
+    if (!dragging || !dragStart.current) return
+    e.stopPropagation()
+    const currentOnNormal = projectOnNormal(e.point)
+    const delta = currentOnNormal - dragStart.current.pointOnNormal
+    const newOffset = Math.max(-10, Math.min(10, dragStart.current.offset + delta))
+    onOffsetChange(Math.round(newOffset * 2) / 2)
+  }, [dragging, projectOnNormal, onOffsetChange])
+
+  const onPointerUp = useCallback((e: ThreeEvent<PointerEvent>) => {
+    e.stopPropagation()
+    setDragging(false)
+    dragStart.current = null
+  }, [])
+
+  const cursorStyle = dragging ? 'grabbing' : selected ? 'grab' : 'pointer'
+
   return (
-    <group matrix={matrix} onClick={(e) => { e.stopPropagation(); onSelect() }}>
+    <group
+      matrix={matrix}
+      onClick={(e) => { e.stopPropagation(); if (!dragging) onSelect() }}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+    >
       <mesh>
         <circleGeometry args={[size, 64]} />
         <meshBasicMaterial
-          color={color}
+          color={dragging ? '#10b981' : color}
           transparent
           opacity={selected ? 0.5 : 0.25}
           side={THREE.DoubleSide}
@@ -67,11 +110,27 @@ function PlaneDisk({ plane, selected, onSelect, params }: {
         <edgesGeometry args={[new THREE.PlaneGeometry(size * 2, size * 2)]} />
         <lineBasicMaterial color={color} transparent opacity={0.3} />
       </lineSegments>
+      {/* Invisible larger hit area for drag */}
+      {selected && (
+        <mesh visible={false}>
+          <circleGeometry args={[size + 2, 64]} />
+          <meshBasicMaterial transparent opacity={0} side={THREE.DoubleSide} />
+        </mesh>
+      )}
     </group>
   )
 }
 
-export function CuttingPlaneVisual({ cuttingResult, selectedPlaneId, onPlaneSelect, planeParams }: CuttingPlaneVisualProps) {
+export function CuttingPlaneVisual({ cuttingResult, selectedPlaneId, onPlaneSelect, planeParams, onPlaneParamsChange }: CuttingPlaneVisualProps) {
+  const handleOffsetChange = useCallback((planeId: string, offset: number) => {
+    if (!onPlaneParamsChange) return
+    const current = planeParams[planeId] ?? { offset: 0, tiltAngle: 0 }
+    onPlaneParamsChange({
+      ...planeParams,
+      [planeId]: { ...current, offset },
+    })
+  }, [planeParams, onPlaneParamsChange])
+
   return (
     <group>
       {cuttingResult.planes.map(plane => (
@@ -81,6 +140,7 @@ export function CuttingPlaneVisual({ cuttingResult, selectedPlaneId, onPlaneSele
           selected={plane.id === selectedPlaneId}
           onSelect={() => onPlaneSelect(plane.id === selectedPlaneId ? null : plane.id)}
           params={planeParams[plane.id] ?? { offset: 0, tiltAngle: 0 }}
+          onOffsetChange={(offset) => handleOffsetChange(plane.id, offset)}
         />
       ))}
     </group>
