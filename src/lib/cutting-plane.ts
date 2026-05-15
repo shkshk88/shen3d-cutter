@@ -76,3 +76,62 @@ export function prepareImplantsForCutting(
     }
   })
 }
+
+export function generateCuttingPlanes(implants: ImplantForCutting[]): CuttingPlane[] {
+  if (implants.length === 0) return []
+
+  const planes: CuttingPlane[] = []
+
+  for (const implant of implants) {
+    planes.push({
+      id: `plane-junction-${implant.index}`,
+      normal: implant.axis.clone(),
+      point: implant.junctionPoint.clone(),
+      confidence: 0.7,
+      method: 'junction',
+      implantIndices: [implant.index],
+    })
+  }
+
+  if (implants.length >= 2) {
+    const averageAxis = new THREE.Vector3()
+    for (const imp of implants) {
+      averageAxis.add(imp.axis)
+    }
+    averageAxis.normalize()
+
+    const midpoint = new THREE.Vector3()
+    for (const imp of implants) {
+      midpoint.add(imp.junctionPoint)
+    }
+    midpoint.divideScalar(implants.length)
+
+    planes.push({
+      id: 'plane-unified',
+      normal: averageAxis.clone(),
+      point: midpoint.clone(),
+      confidence: 0.85,
+      method: 'midpoint',
+      implantIndices: implants.map(i => i.index),
+    })
+  }
+
+  return planes
+}
+
+export function computeCuttingResult(
+  analysisResult: MeshAnalysisResult
+): CuttingResult {
+  const implants = prepareImplantsForCutting(analysisResult)
+  const planes = generateCuttingPlanes(implants)
+
+  const averageAxis = new THREE.Vector3()
+  if (implants.length > 0) {
+    for (const imp of implants) averageAxis.add(imp.axis)
+    averageAxis.normalize()
+  }
+
+  const lines: CutLine[] = []
+
+  return { implants, planes, lines, averageAxis }
+}
