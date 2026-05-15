@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { downloadAnnotations } from '@/lib/export-annotations'
 import { MeshAnalysisResult } from '@/lib/mesh-analysis'
+import { CuttingResult, CuttingPlane } from '@/lib/cutting-plane'
 import * as THREE from 'three'
 
 interface SidebarProps {
@@ -11,9 +12,49 @@ interface SidebarProps {
   selectedImplant?: number | null
   onImplantSelect?: (index: number | null) => void
   annotationCount?: number
+  cuttingResult?: CuttingResult | null
+  selectedPlaneId?: string | null
+  onPlaneSelect?: (id: string | null) => void
 }
 
-export function Sidebar({ analysisResult, selectedImplant, onImplantSelect, annotationCount = 0 }: SidebarProps) {
+function PlaneCard({ plane, selected, onClick }: {
+  plane: CuttingPlane
+  selected: boolean
+  onClick: () => void
+}) {
+  const color = plane.method === 'junction' ? '#f59e0b' : '#10b981'
+  const methodLabel = plane.method === 'junction' ? 'Giunzione' :
+                      plane.method === 'midpoint' ? 'Punto medio' : 'Curvatura'
+  const confidencePct = Math.round(plane.confidence * 100)
+
+  return (
+    <div
+      className={`p-2 rounded text-xs cursor-pointer ${selected ? 'bg-amber-500/20 border border-amber-500' : 'bg-muted'}`}
+      onClick={onClick}
+    >
+      <div className="flex items-center gap-2 mb-1">
+        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: color }} />
+        <span className="font-medium">{methodLabel}</span>
+        <span className="ml-auto text-muted-foreground">{plane.implantIndices.map(i => i + 1).join(', ')}</span>
+      </div>
+      <div className="w-full bg-muted-foreground/20 rounded-full h-1.5">
+        <div
+          className="h-1.5 rounded-full"
+          style={{ width: `${confidencePct}%`, backgroundColor: color }}
+        />
+      </div>
+      <p className="text-[10px] text-muted-foreground mt-1">Confidenza: {confidencePct}%</p>
+      {selected && (
+        <div className="mt-1 text-[10px] text-muted-foreground space-y-0.5">
+          <p>Pos: ({plane.point.x.toFixed(1)}, {plane.point.y.toFixed(1)}, {plane.point.z.toFixed(1)})</p>
+          <p>Norm: ({plane.normal.x.toFixed(2)}, {plane.normal.y.toFixed(2)}, {plane.normal.z.toFixed(2)})</p>
+        </div>
+      )}
+    </div>
+  )
+}
+
+export function Sidebar({ analysisResult, selectedImplant, onImplantSelect, annotationCount = 0, cuttingResult, selectedPlaneId, onPlaneSelect }: SidebarProps) {
   const size = analysisResult?.boundingBox
     ? new THREE.Vector3()
     : null
@@ -80,6 +121,26 @@ export function Sidebar({ analysisResult, selectedImplant, onImplantSelect, anno
           <p className="text-sm text-muted-foreground">Carica un STL per iniziare</p>
         )}
       </div>
+
+      {/* Piani di Taglio */}
+      <div className="p-4 space-y-2">
+        <p className="text-sm font-medium text-muted-foreground">PIANI DI TAGLIO</p>
+        {cuttingResult && cuttingResult.planes.length > 0 ? (
+          <div className="space-y-2">
+            {cuttingResult.planes.map((plane) => (
+              <PlaneCard
+                key={plane.id}
+                plane={plane}
+                selected={plane.id === selectedPlaneId}
+                onClick={() => onPlaneSelect?.(plane.id === selectedPlaneId ? null : plane.id)}
+              />
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">Nessun piano generato</p>
+        )}
+      </div>
+      <Separator />
 
       {/* Export annotazioni */}
       <div className="p-4 border-t">

@@ -33,17 +33,19 @@ interface ViewerSectionProps {
   selectedImplant: number | null
   onImplantSelect: (index: number | null) => void
   onAnnotationSave?: () => void
+  cuttingResult: CuttingResult | null
+  onCuttingResultChange: (result: CuttingResult | null) => void
+  selectedPlaneId: string | null
+  onPlaneSelect: (id: string | null) => void
 }
 
-export function ViewerSection({ analysisResult, onAnalysisResultChange, selectedImplant, onImplantSelect, onAnnotationSave }: ViewerSectionProps) {
+export function ViewerSection({ analysisResult, onAnalysisResultChange, selectedImplant, onImplantSelect, onAnnotationSave, cuttingResult, onCuttingResultChange, selectedPlaneId, onPlaneSelect }: ViewerSectionProps) {
   const [stlUrl, setStlUrl] = useState<string | null>(null)
   const [fileName, setFileName] = useState<string>('')
   const [showCurvature, setShowCurvature] = useState(false)
   const [curvatureOpacity, setCurvatureOpacity] = useState(0.7)
   const [annotationMode, setAnnotationMode] = useState(false)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
-  const [cuttingResult, setCuttingResult] = useState<CuttingResult | null>(null)
-  const [selectedPlaneId, setSelectedPlaneId] = useState<string | null>(null)
   const [showCuttingPlanes, setShowCuttingPlanes] = useState(true)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -63,8 +65,7 @@ export function ViewerSection({ analysisResult, onAnalysisResultChange, selected
     setShowCurvature(false)
     setAnnotationMode(false)
     setIsAnalyzing(true)
-    setCuttingResult(null)
-    setSelectedPlaneId(null)
+    onCuttingResultChange(null)
   }, [onAnalysisResultChange, onImplantSelect])
 
   const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -82,8 +83,8 @@ export function ViewerSection({ analysisResult, onAnalysisResultChange, selected
     onAnalysisResultChange(result)
     setIsAnalyzing(false)
     const cutting = computeCuttingResult(result)
-    setCuttingResult(cutting)
-  }, [onAnalysisResultChange])
+    onCuttingResultChange(cutting)
+  }, [onAnalysisResultChange, onCuttingResultChange])
 
   const handleMeshClick = useCallback((point: THREE.Vector3) => {
     if (annotationMode) {
@@ -198,7 +199,7 @@ export function ViewerSection({ analysisResult, onAnalysisResultChange, selected
             onMeshClick={handleMeshClick}
             cuttingResult={showCuttingPlanes ? cuttingResult : null}
             selectedPlaneId={selectedPlaneId}
-            onPlaneSelect={setSelectedPlaneId}
+            onPlaneSelect={onPlaneSelect}
           />
         ) : (
           /* BIG upload area — the input IS the button */
