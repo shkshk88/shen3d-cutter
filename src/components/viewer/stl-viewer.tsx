@@ -2,7 +2,7 @@
 
 import { Canvas } from '@react-three/fiber'
 import { OrbitControls, ContactShadows } from '@react-three/drei'
-import { Suspense, useCallback } from 'react'
+import { Suspense, useCallback, useState, useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import { StlModel } from './stl-model'
 import { LoadingSpinner } from './loading-spinner'
@@ -10,7 +10,8 @@ import { ImplantMarker } from './implant-marker'
 import { CuttingPlaneVisual } from './cutting-plane-visual'
 import { CutLineVisual } from './cut-line-visual'
 import { MeshAnalysisResult } from '@/lib/mesh-analysis'
-import { CuttingResult } from '@/lib/cutting-plane'
+import { CuttingResult, CuttingPlane, applyPlaneParams, CutLine } from '@/lib/cutting-plane'
+import { computeAllCutLines, intersectPlaneMesh } from '@/lib/mesh-intersection'
 import { PlaneParams } from './viewer-section'
 
 interface StlViewerProps {
@@ -34,11 +35,38 @@ export function StlViewer({
   showCurvature, curvatureOpacity, annotationMode, onMeshClick,
   cuttingResult, selectedPlaneId, onPlaneSelect, planeParams
 }: StlViewerProps) {
+  const geometryRef = useRef<THREE.BufferGeometry | null>(null)
+  const [liveCutLines, setLiveCutLines] = useState<CutLine[]>([])
+
   const handleCanvasClick = useCallback((e: THREE.Event & { point?: THREE.Vector3 }) => {
     if (annotationMode && onMeshClick && e.point) {
       onMeshClick(e.point)
     }
   }, [annotationMode, onMeshClick])
+
+  const handleGeometryReady = useCallback((geometry: THREE.BufferGeometry) => {
+    geometryRef.current = geometry
+  }, [])
+
+  const hasParams = Object.keys(planeParams).length > 0
+
+  const computedLines = useMemo(() => {
+    if (!cuttingResult || !geometryRef.current) return cuttingResult?.lines ?? []
+    const geo = geometryRef.current
+    return cuttingResult.planes.map(plane => {
+      const params = planeParams[plane.id]
+      if (!params || (params.offset === 0 && params.tiltAngle === 0)) {
+        const existing = cuttingResult.lines.find(l => l.planeId === plane.id)
+        if (existing) return existing
+      }
+      const modified: CuttingPlane = {
+        ...plane,
+        offset: params?.offset ?? 0,
+        tiltAngle: params?.tiltAngle ?? 0,
+      }
+      return intersectPlaneMesh(modified, geo)
+    })
+  }, [cuttingResult, planeParams, hasParams])
 
   return (
     <Canvas
@@ -59,6 +87,7 @@ export function StlViewer({
           curvatureOpacity={curvatureOpacity}
           annotationMode={annotationMode}
           onMeshClick={onMeshClick}
+          onGeometryReady={handleGeometryReady}
         />
       </Suspense>
 
@@ -84,8 +113,8 @@ export function StlViewer({
         />
       )}
 
-      {cuttingResult && cuttingResult.lines.length > 0 && (
-        <CutLineVisual lines={cuttingResult.lines} />
+      {cuttingResult && computedLines.length > 0 && (
+        <CutLineVisual lines={computedLines} />
       )}
 
       <ContactShadows position={[0, -30, 0]} opacity={0.4} scale={100} blur={2} />

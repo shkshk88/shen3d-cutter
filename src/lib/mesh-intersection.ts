@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { CuttingPlane, CutLine } from './cutting-plane'
+import { CuttingPlane, CutLine, applyPlaneParams } from './cutting-plane'
 
 export function intersectPlaneMesh(
   plane: CuttingPlane,
@@ -12,9 +12,9 @@ export function intersectPlaneMesh(
     return { id: `line-${plane.id}`, planeId: plane.id, points: [], closed: false }
   }
 
-  const planeNormal = plane.normal.clone().normalize()
-  const planeConstant = -planeNormal.dot(plane.point)
-  const plane3 = new THREE.Plane(planeNormal, planeConstant)
+  const { effectiveNormal, effectivePoint } = applyPlaneParams(plane)
+  const planeConstant = -effectiveNormal.dot(effectivePoint)
+  const plane3 = new THREE.Plane(effectiveNormal, planeConstant)
 
   const segments: [THREE.Vector3, THREE.Vector3][] = []
   const vA = new THREE.Vector3()

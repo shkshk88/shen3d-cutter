@@ -14,9 +14,10 @@ interface StlModelProps {
   curvatureOpacity?: number
   annotationMode?: boolean
   onMeshClick?: (point: THREE.Vector3) => void
+  onGeometryReady?: (geometry: THREE.BufferGeometry) => void
 }
 
-export function StlModel({ url, onAnalysisComplete, showCurvature, curvatureOpacity, annotationMode, onMeshClick }: StlModelProps) {
+export function StlModel({ url, onAnalysisComplete, showCurvature, curvatureOpacity, annotationMode, onMeshClick, onGeometryReady }: StlModelProps) {
   const geometry = useLoader(STLLoader, url)
   const meshRef = useRef<THREE.Mesh>(null)
   const [analysisData, setAnalysisData] = useState<MeshAnalysisResult | null>(null)
@@ -42,6 +43,7 @@ export function StlModel({ url, onAnalysisComplete, showCurvature, curvatureOpac
     const result = analyzeMesh(geometry)
     setAnalysisData(result)
     onAnalysisComplete?.(result)
+    onGeometryReady?.(geometry)
   }, [geometry])
 
   useEffect(() => {
