@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import { Button } from '@/components/ui/button'
 import { Slider } from '@/components/ui/slider'
@@ -40,16 +40,14 @@ export function ViewerSection({ analysisResult, onAnalysisResultChange, selected
   const [curvatureOpacity, setCurvatureOpacity] = useState(0.7)
   const [annotationMode, setAnnotationMode] = useState(false)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const annotationTool = useAnnotationTool()
 
-  const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
+  const handleFile = useCallback((file: File) => {
     const ext = file.name.split('.').pop()?.toLowerCase()
     if (ext !== 'stl') {
       alert('Seleziona un file .stl')
-      e.target.value = ''
       return
     }
     const url = URL.createObjectURL(file)
@@ -62,19 +60,16 @@ export function ViewerSection({ analysisResult, onAnalysisResultChange, selected
     setIsAnalyzing(true)
   }, [onAnalysisResultChange, onImplantSelect])
 
+  const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) handleFile(file)
+  }, [handleFile])
+
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     const file = e.dataTransfer.files[0]
-    if (!file) return
-    const url = URL.createObjectURL(file)
-    setStlUrl(url)
-    setFileName(file.name)
-    onAnalysisResultChange(null)
-    onImplantSelect(null)
-    setShowCurvature(false)
-    setAnnotationMode(false)
-    setIsAnalyzing(true)
-  }, [onAnalysisResultChange, onImplantSelect])
+    if (file) handleFile(file)
+  }, [handleFile])
 
   const handleAnalysisComplete = useCallback((result: MeshAnalysisResult) => {
     onAnalysisResultChange(result)
@@ -100,84 +95,74 @@ export function ViewerSection({ analysisResult, onAnalysisResultChange, selected
 
   return (
     <div className="h-full flex flex-col">
-      {/* Toolbar */}
-      <div className="h-12 border-b flex items-center px-4 gap-4 bg-card overflow-x-auto">
-        <span className="text-sm font-medium whitespace-nowrap">{fileName || 'Nessun file caricato'}</span>
-        <div className="relative inline-flex">
-          <input
-            id="stl-upload"
-            type="file"
-            onChange={handleFileUpload}
-            className="absolute inset-0 opacity-0 cursor-pointer z-10"
-          />
-          <span className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground h-9 px-3 pointer-events-none select-none">
-            Carica STL
-          </span>
-        </div>
+      {/* Toolbar — visible only after file loaded */}
+      {stlUrl && (
+        <div className="h-12 border-b flex items-center px-4 gap-4 bg-card overflow-x-auto">
+          <span className="text-sm font-medium whitespace-nowrap">{fileName}</span>
+          <Button variant="outline" size="sm" onClick={() => { setStlUrl(null); setFileName(''); onAnalysisResultChange(null) }}>
+            Nuovo file
+          </Button>
 
-        {stlUrl && (
-          <>
-            <Button
-              variant={showCurvature ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setShowCurvature(!showCurvature)}
-            >
-              Curvatura
-            </Button>
+          <Button
+            variant={showCurvature ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setShowCurvature(!showCurvature)}
+          >
+            Curvatura
+          </Button>
 
-            {showCurvature && (
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">Opacità</span>
-                <Slider
-                  min={0} max={100} defaultValue={[70]}
-                  onValueChange={(v) => setCurvatureOpacity((Array.isArray(v) ? v[0] : v as number) / 100)}
-                  className="w-24"
-                />
-              </div>
-            )}
+          {showCurvature && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">Opacità</span>
+              <Slider
+                min={0} max={100} defaultValue={[70]}
+                onValueChange={(v) => setCurvatureOpacity((Array.isArray(v) ? v[0] : v as number) / 100)}
+                className="w-24"
+              />
+            </div>
+          )}
 
-            <Button
-              variant={annotationMode ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setAnnotationMode(!annotationMode)}
-            >
-              Annota {annotationTool.state.points.length > 0 ? `(${annotationTool.state.points.length})` : ''}
-            </Button>
+          <Button
+            variant={annotationMode ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setAnnotationMode(!annotationMode)}
+          >
+            Annota {annotationTool.state.points.length > 0 ? `(${annotationTool.state.points.length})` : ''}
+          </Button>
 
-            {annotationMode && (
-              <>
-                <Button variant="outline" size="xs" onClick={annotationTool.undoPoint} disabled={annotationTool.state.points.length === 0}>
-                  Undo
-                </Button>
-                <Button variant="outline" size="xs" onClick={annotationTool.clearPoints} disabled={annotationTool.state.points.length === 0}>
-                  Clear
-                </Button>
-                <Button variant="default" size="xs" onClick={handleSaveAnnotation} disabled={!annotationTool.canSave}>
-                  Salva
-                </Button>
-              </>
-            )}
-          </>
-        )}
-
-        {analysisResult && (
-          <div className="flex items-center gap-2 ml-auto">
-            <span className="text-xs text-muted-foreground">
-              {analysisResult.cylinderCandidates.length} impianto/i
-            </span>
-            {analysisResult.cylinderCandidates.map((_, i) => (
-              <Button
-                key={i}
-                variant={selectedImplant === i ? 'default' : 'outline'}
-                size="xs"
-                onClick={() => onImplantSelect(selectedImplant === i ? null : i)}
-              >
-                {i + 1}
+          {annotationMode && (
+            <>
+              <Button variant="outline" size="xs" onClick={annotationTool.undoPoint} disabled={annotationTool.state.points.length === 0}>
+                Undo
               </Button>
-            ))}
-          </div>
-        )}
-      </div>
+              <Button variant="outline" size="xs" onClick={annotationTool.clearPoints} disabled={annotationTool.state.points.length === 0}>
+                Clear
+              </Button>
+              <Button variant="default" size="xs" onClick={handleSaveAnnotation} disabled={!annotationTool.canSave}>
+                Salva
+              </Button>
+            </>
+          )}
+
+          {analysisResult && (
+            <div className="flex items-center gap-2 ml-auto">
+              <span className="text-xs text-muted-foreground">
+                {analysisResult.cylinderCandidates.length} impianto/i
+              </span>
+              {analysisResult.cylinderCandidates.map((_, i) => (
+                <Button
+                  key={i}
+                  variant={selectedImplant === i ? 'default' : 'outline'}
+                  size="xs"
+                  onClick={() => onImplantSelect(selectedImplant === i ? null : i)}
+                >
+                  {i + 1}
+                </Button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       <div
         className="flex-1 relative"
@@ -197,15 +182,31 @@ export function ViewerSection({ analysisResult, onAnalysisResultChange, selected
             onMeshClick={handleMeshClick}
           />
         ) : (
-          <div className="h-full flex items-center justify-center border-2 border-dashed rounded-lg m-4">
-            <div className="text-center">
-              <p className="text-lg text-muted-foreground">Trascina qui un file STL</p>
-              <p className="text-sm text-muted-foreground mt-2">oppure clicca &quot;Carica STL&quot;</p>
+          /* BIG upload area — the input IS the button */
+          <div className="h-full flex items-center justify-center p-6">
+            <div className="w-full max-w-sm text-center">
+              <div className="text-6xl mb-6">🦷</div>
+              <h2 className="text-xl font-semibold mb-2">Shen3D Cutter</h2>
+              <p className="text-sm text-muted-foreground mb-8">Carica un file STL per analizzare il ponte dentale</p>
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="w-full py-4 px-6 rounded-xl bg-primary text-primary-foreground text-lg font-semibold shadow-lg hover:opacity-90 active:scale-95 transition-all"
+              >
+                📂 Carica file STL
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                onChange={handleFileUpload}
+                className="hidden"
+              />
+              <p className="text-xs text-muted-foreground mt-4">oppure trascina il file qui</p>
             </div>
           </div>
         )}
 
-        {/* Loading overlay per analisi */}
+        {/* Loading overlay */}
         {isAnalyzing && (
           <div className="absolute top-4 right-4 bg-card border rounded-lg p-3 shadow-lg z-10">
             <div className="flex items-center gap-2">
