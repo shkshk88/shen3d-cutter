@@ -97,11 +97,9 @@ export function ViewerSection({ analysisResult, onAnalysisResultChange, selected
       {/* Toolbar */}
       <div className="h-12 border-b flex items-center px-4 gap-4 bg-card overflow-x-auto">
         <span className="text-sm font-medium whitespace-nowrap">{fileName || 'Nessun file caricato'}</span>
-        <label className="cursor-pointer">
-          <Button variant="outline" size="sm" onClick={() => document.getElementById('stl-upload')?.click()}>
-            Carica STL
-          </Button>
-          <input id="stl-upload" type="file" accept=".stl" onChange={handleFileUpload} className="hidden" />
+        <label className="cursor-pointer inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground h-9 px-3">
+          Carica STL
+          <input id="stl-upload" type="file" accept=".stl" onChange={handleFileUpload} className="sr-only" />
         </label>
 
         {stlUrl && (
