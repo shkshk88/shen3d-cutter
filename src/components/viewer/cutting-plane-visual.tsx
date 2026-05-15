@@ -14,6 +14,72 @@ interface CuttingPlaneVisualProps {
   onPlaneParamsChange?: (params: Record<string, PlaneParams>) => void
 }
 
+function DragHandle({ hovered, onHover }: { hovered: boolean; onHover: (h: boolean) => void }) {
+  const color = hovered ? '#f59e0b' : '#ffffff'
+  return (
+    <mesh
+      onPointerOver={(e) => { e.stopPropagation(); onHover(true) }}
+      onPointerOut={(e) => { e.stopPropagation(); onHover(false) }}
+    >
+      <sphereGeometry args={[1.5, 16, 16]} />
+      <meshBasicMaterial color={color} transparent opacity={0.9} />
+    </mesh>
+  )
+}
+
+function NormalArrow({ length = 8 }: { length?: number }) {
+  const points = useMemo(() => [
+    new THREE.Vector3(0, 0, 0),
+    new THREE.Vector3(0, length, 0),
+  ], [length])
+
+  return (
+    <group>
+      <line>
+        <bufferGeometry>
+          <bufferAttribute
+            attach="attributes-position"
+            args={[new Float32Array([0, 0, 0, 0, length, 0]), 3]}
+          />
+        </bufferGeometry>
+        <lineBasicMaterial color="#6366f1" transparent opacity={0.8} />
+      </line>
+      <mesh position={[0, length, 0]} rotation={[0, 0, Math.PI / 2]}>
+        <coneGeometry args={[0.8, 2, 8]} />
+        <meshBasicMaterial color="#6366f1" transparent opacity={0.8} />
+      </mesh>
+    </group>
+  )
+}
+
+function TiltArc() {
+  const arcPoints = useMemo(() => {
+    const pts: THREE.Vector3[] = []
+    const radius = 4
+    for (let i = 0; i <= 24; i++) {
+      const angle = (i / 24) * Math.PI * 0.5
+      pts.push(new THREE.Vector3(
+        Math.cos(angle) * radius,
+        Math.sin(angle) * radius,
+        0
+      ))
+    }
+    return pts
+  }, [])
+
+  return (
+    <line>
+      <bufferGeometry>
+        <bufferAttribute
+          attach="attributes-position"
+          args={[new Float32Array(arcPoints.flatMap(p => [p.x, p.y, p.z])), 3]}
+        />
+      </bufferGeometry>
+      <lineBasicMaterial color="#f59e0b" transparent opacity={0.6} />
+    </line>
+  )
+}
+
 function PlaneDisk({ plane, selected, onSelect, params, onOffsetChange }: {
   plane: CuttingPlane
   selected: boolean
@@ -46,6 +112,7 @@ function PlaneDisk({ plane, selected, onSelect, params, onOffsetChange }: {
   }, [effectivePlane])
 
   const [dragging, setDragging] = useState(false)
+  const [handleHovered, setHandleHovered] = useState(false)
   const dragStart = useRef<{ pointOnNormal: number; offset: number } | null>(null)
   const normalDir = useRef(effectivePlane.effectiveNormal.clone().normalize())
 
@@ -77,7 +144,7 @@ function PlaneDisk({ plane, selected, onSelect, params, onOffsetChange }: {
     dragStart.current = null
   }, [])
 
-  const cursorStyle = dragging ? 'grabbing' : selected ? 'grab' : 'pointer'
+  const handleColor = dragging ? '#10b981' : handleHovered ? '#f59e0b' : '#ffffff'
 
   return (
     <group
@@ -110,12 +177,25 @@ function PlaneDisk({ plane, selected, onSelect, params, onOffsetChange }: {
         <edgesGeometry args={[new THREE.PlaneGeometry(size * 2, size * 2)]} />
         <lineBasicMaterial color={color} transparent opacity={0.3} />
       </lineSegments>
-      {/* Invisible larger hit area for drag */}
+
+      {/* Drag handles — visible only when selected */}
       {selected && (
-        <mesh visible={false}>
-          <circleGeometry args={[size + 2, 64]} />
-          <meshBasicMaterial transparent opacity={0} side={THREE.DoubleSide} />
-        </mesh>
+        <>
+          {/* Central drag sphere */}
+          <mesh
+            onPointerOver={(e) => { e.stopPropagation(); setHandleHovered(true) }}
+            onPointerOut={(e) => { e.stopPropagation(); setHandleHovered(false) }}
+          >
+            <sphereGeometry args={[1.5, 16, 16]} />
+            <meshBasicMaterial color={handleColor} transparent opacity={0.9} />
+          </mesh>
+
+          {/* Normal direction arrow */}
+          <NormalArrow />
+
+          {/* Tilt arc indicator */}
+          <TiltArc />
+        </>
       )}
     </group>
   )
