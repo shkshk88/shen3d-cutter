@@ -6,6 +6,13 @@ import * as THREE from 'three'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { analyzeMesh, MeshAnalysisResult } from '@/lib/mesh-analysis'
 import { applyCurvatureColors } from './curvature-visualization'
+import { CuttingPlane, applyPlaneParams } from '@/lib/cutting-plane'
+import { PlaneParams } from './viewer-section'
+
+interface SeparationPlane {
+  normal: THREE.Vector3
+  point: THREE.Vector3
+}
 
 interface StlModelProps {
   url: string
@@ -15,9 +22,43 @@ interface StlModelProps {
   annotationMode?: boolean
   onMeshClick?: (point: THREE.Vector3) => void
   onGeometryReady?: (geometry: THREE.BufferGeometry) => void
+  showSeparation?: boolean
+  separationPlane?: SeparationPlane | null
 }
 
-export function StlModel({ url, onAnalysisComplete, showCurvature, curvatureOpacity, annotationMode, onMeshClick, onGeometryReady }: StlModelProps) {
+function applySeparationColors(geometry: THREE.BufferGeometry, plane: SeparationPlane) {
+  const positionAttr = geometry.getAttribute('position')
+  if (!positionAttr) return
+
+  const normal = plane.normal.clone().normalize()
+  const constant = -normal.dot(plane.point)
+  const threePlane = new THREE.Plane(normal, constant)
+
+  const count = positionAttr.count
+  const colors = new Float32Array(count * 3)
+
+  for (let i = 0; i < count; i++) {
+    const x = positionAttr.getX(i)
+    const y = positionAttr.getY(i)
+    const z = positionAttr.getZ(i)
+    const dist = threePlane.distanceToPoint(new THREE.Vector3(x, y, z))
+
+    if (dist > 0) {
+      colors[i * 3] = 0.3
+      colors[i * 3 + 1] = 0.5
+      colors[i * 3 + 2] = 1.0
+    } else {
+      colors[i * 3] = 1.0
+      colors[i * 3 + 1] = 0.3
+      colors[i * 3 + 2] = 0.3
+    }
+  }
+
+  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3))
+  geometry.attributes.color.needsUpdate = true
+}
+
+export function StlModel({ url, onAnalysisComplete, showCurvature, curvatureOpacity, annotationMode, onMeshClick, onGeometryReady, showSeparation, separationPlane }: StlModelProps) {
   const geometry = useLoader(STLLoader, url)
   const meshRef = useRef<THREE.Mesh>(null)
   const [analysisData, setAnalysisData] = useState<MeshAnalysisResult | null>(null)
@@ -49,7 +90,9 @@ export function StlModel({ url, onAnalysisComplete, showCurvature, curvatureOpac
   useEffect(() => {
     if (!analysisData || !geometry) return
 
-    if (showCurvature) {
+    if (showSeparation && separationPlane) {
+      applySeparationColors(geometry, separationPlane)
+    } else if (showCurvature) {
       applyCurvatureColors(geometry, analysisData.curvature)
     } else {
       geometry.deleteAttribute('color')
@@ -59,9 +102,9 @@ export function StlModel({ url, onAnalysisComplete, showCurvature, curvatureOpac
     if (geometry.attributes.color) {
       geometry.attributes.color.needsUpdate = true
     }
-  }, [showCurvature, analysisData, geometry])
+  }, [showCurvature, showSeparation, separationPlane, analysisData, geometry])
 
-  const hasVertexColors = showCurvature && !!geometry.getAttribute('color')
+  const hasVertexColors = !!(showCurvature || (showSeparation && separationPlane)) && !!geometry.getAttribute('color')
 
   const handleClick = useCallback((e: THREE.Event & { point?: THREE.Vector3; stopPropagation?: () => void }) => {
     if (annotationMode && onMeshClick && e.point) {
@@ -82,8 +125,8 @@ export function StlModel({ url, onAnalysisComplete, showCurvature, curvatureOpac
         roughness={0.6}
         side={THREE.DoubleSide}
         vertexColors={hasVertexColors}
-        transparent={showCurvature && (curvatureOpacity ?? 1) < 1}
-        opacity={showCurvature ? (curvatureOpacity ?? 1) : 1}
+        transparent={!!((showCurvature && (curvatureOpacity ?? 1) < 1) || (showSeparation && separationPlane))}
+        opacity={showSeparation && separationPlane ? 0.9 : showCurvature ? (curvatureOpacity ?? 1) : 1}
       />
     </mesh>
   )

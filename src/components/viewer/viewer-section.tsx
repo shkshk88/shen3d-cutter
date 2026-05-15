@@ -1,11 +1,11 @@
 'use client'
 
-import { useState, useCallback, useRef, useEffect } from 'react'
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import dynamic from 'next/dynamic'
 import { Button } from '@/components/ui/button'
 import { Slider } from '@/components/ui/slider'
 import { MeshAnalysisResult } from '@/lib/mesh-analysis'
-import { computeCuttingResult, CuttingResult } from '@/lib/cutting-plane'
+import { computeCuttingResult, CuttingResult, applyPlaneParams, CuttingPlane } from '@/lib/cutting-plane'
 import { computeAllCutLines } from '@/lib/mesh-intersection'
 import { useAnnotationTool } from './annotation-tool'
 import * as THREE from 'three'
@@ -54,6 +54,7 @@ export function ViewerSection({ analysisResult, onAnalysisResultChange, selected
   const [annotationMode, setAnnotationMode] = useState(false)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [showCuttingPlanes, setShowCuttingPlanes] = useState(true)
+  const [showSeparation, setShowSeparation] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const annotationTool = useAnnotationTool()
@@ -130,6 +131,20 @@ export function ViewerSection({ analysisResult, onAnalysisResultChange, selected
       [selectedPlaneId]: { offset: 0, tiltAngle: 0 },
     })
   }, [selectedPlaneId, planeParams, onPlaneParamsChange])
+
+  const separationPlane = useMemo(() => {
+    if (!selectedPlaneId || !cuttingResult || !showSeparation) return null
+    const plane = cuttingResult.planes.find(p => p.id === selectedPlaneId)
+    if (!plane) return null
+    const params = planeParams[selectedPlaneId] ?? { offset: 0, tiltAngle: 0 }
+    const modified: CuttingPlane = {
+      ...plane,
+      offset: params.offset,
+      tiltAngle: params.tiltAngle,
+    }
+    const { effectiveNormal, effectivePoint } = applyPlaneParams(modified)
+    return { normal: effectiveNormal, point: effectivePoint }
+  }, [selectedPlaneId, cuttingResult, showSeparation, planeParams])
 
   return (
     <div className="h-full flex flex-col">
@@ -219,6 +234,13 @@ export function ViewerSection({ analysisResult, onAnalysisResultChange, selected
                   <Button variant="outline" size="xs" onClick={resetPlaneParams}>
                     Reset
                   </Button>
+                  <Button
+                    variant={showSeparation ? 'default' : 'outline'}
+                    size="xs"
+                    onClick={() => setShowSeparation(!showSeparation)}
+                  >
+                    Separa
+                  </Button>
                 </div>
               )}
               {analysisResult.cylinderCandidates.map((_, i) => (
@@ -257,6 +279,8 @@ export function ViewerSection({ analysisResult, onAnalysisResultChange, selected
             onPlaneSelect={onPlaneSelect}
             planeParams={planeParams}
             onPlaneParamsChange={onPlaneParamsChange}
+            showSeparation={showSeparation}
+            separationPlane={separationPlane}
           />
         ) : (
           /* BIG upload area — the input IS the button */

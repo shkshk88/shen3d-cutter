@@ -14,6 +14,11 @@ import { CuttingResult, CuttingPlane, applyPlaneParams, CutLine } from '@/lib/cu
 import { computeAllCutLines, intersectPlaneMesh } from '@/lib/mesh-intersection'
 import { PlaneParams } from './viewer-section'
 
+interface SeparationPlane {
+  normal: THREE.Vector3
+  point: THREE.Vector3
+}
+
 interface StlViewerProps {
   url: string
   analysisResult: MeshAnalysisResult | null
@@ -29,12 +34,15 @@ interface StlViewerProps {
   onPlaneSelect: (id: string | null) => void
   planeParams: Record<string, PlaneParams>
   onPlaneParamsChange?: (params: Record<string, PlaneParams>) => void
+  showSeparation?: boolean
+  separationPlane?: SeparationPlane | null
 }
 
 export function StlViewer({
   url, analysisResult, selectedImplant, onImplantSelect, onAnalysisComplete,
   showCurvature, curvatureOpacity, annotationMode, onMeshClick,
-  cuttingResult, selectedPlaneId, onPlaneSelect, planeParams, onPlaneParamsChange
+  cuttingResult, selectedPlaneId, onPlaneSelect, planeParams, onPlaneParamsChange,
+  showSeparation, separationPlane
 }: StlViewerProps) {
   const geometryRef = useRef<THREE.BufferGeometry | null>(null)
   const [liveCutLines, setLiveCutLines] = useState<CutLine[]>([])
@@ -89,6 +97,8 @@ export function StlViewer({
           annotationMode={annotationMode}
           onMeshClick={onMeshClick}
           onGeometryReady={handleGeometryReady}
+          showSeparation={showSeparation}
+          separationPlane={separationPlane}
         />
       </Suspense>
 
