@@ -8,6 +8,8 @@ import { MeshAnalysisResult } from '@/lib/mesh-analysis'
 import { computeCuttingResult, CuttingResult, applyPlaneParams, CuttingPlane } from '@/lib/cutting-plane'
 import { computeAllCutLines } from '@/lib/mesh-intersection'
 import { useAnnotationTool } from './annotation-tool'
+import { uploadStlToServer, splitStl, SplitResult } from '@/lib/cutter-client'
+import { SplitResultDialog } from './split-result-dialog'
 import * as THREE from 'three'
 
 export interface PlaneParams {
@@ -45,9 +47,11 @@ interface ViewerSectionProps {
   planeParams: Record<string, PlaneParams>
   onPlaneParamsChange: (params: Record<string, PlaneParams>) => void
   onFileNameChange?: (name: string) => void
+  stlFile?: File | null
+  onStlFileChange?: (file: File | null) => void
 }
 
-export function ViewerSection({ analysisResult, onAnalysisResultChange, selectedImplant, onImplantSelect, onAnnotationSave, cuttingResult, onCuttingResultChange, selectedPlaneId, onPlaneSelect, planeParams, onPlaneParamsChange, onFileNameChange }: ViewerSectionProps) {
+export function ViewerSection({ analysisResult, onAnalysisResultChange, selectedImplant, onImplantSelect, onAnnotationSave, cuttingResult, onCuttingResultChange, selectedPlaneId, onPlaneSelect, planeParams, onPlaneParamsChange, onFileNameChange, stlFile, onStlFileChange }: ViewerSectionProps) {
   const [stlUrl, setStlUrl] = useState<string | null>(null)
   const [fileName, setFileName] = useState<string>('')
   const [showCurvature, setShowCurvature] = useState(false)
@@ -56,6 +60,9 @@ export function ViewerSection({ analysisResult, onAnalysisResultChange, selected
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [showCuttingPlanes, setShowCuttingPlanes] = useState(true)
   const [showSeparation, setShowSeparation] = useState(false)
+  const [isCutting, setIsCutting] = useState(false)
+  const [splitResult, setSplitResult] = useState<SplitResult | null>(null)
+  const [splitDialogOpen, setSplitDialogOpen] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const annotationTool = useAnnotationTool()
@@ -76,7 +83,9 @@ export function ViewerSection({ analysisResult, onAnalysisResultChange, selected
     setAnnotationMode(false)
     setIsAnalyzing(true)
     onCuttingResultChange(null)
-  }, [onAnalysisResultChange, onImplantSelect, onFileNameChange])
+    setSplitResult(null)
+    onStlFileChange?.(file)
+  }, [onAnalysisResultChange, onImplantSelect, onFileNameChange, onStlFileChange])
 
   const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -112,6 +121,35 @@ export function ViewerSection({ analysisResult, onAnalysisResultChange, selected
       onAnnotationSave?.()
     }
   }, [annotationTool, fileName, analysisResult, onAnnotationSave])
+
+  const handleCut = useCallback(async () => {
+    if (!stlFile || !selectedPlaneId || !cuttingResult) return
+    const plane = cuttingResult.planes.find(p => p.id === selectedPlaneId)
+    if (!plane) return
+
+    const params = planeParams[selectedPlaneId] ?? { offset: 0, tiltAngle: 0 }
+    const modified: CuttingPlane = { ...plane, offset: params.offset, tiltAngle: params.tiltAngle }
+    const { effectiveNormal, effectivePoint } = applyPlaneParams(modified)
+
+    setIsCutting(true)
+    setSplitResult(null)
+
+    try {
+      const uploadResult = await uploadStlToServer(stlFile)
+      const result = await splitStl(
+        uploadResult.stl_path,
+        [effectiveNormal.x, effectiveNormal.y, effectiveNormal.z],
+        [effectivePoint.x, effectivePoint.y, effectivePoint.z]
+      )
+      setSplitResult(result)
+      setSplitDialogOpen(true)
+    } catch (err) {
+      setSplitResult({ engine: 'trimesh', error: err instanceof Error ? err.message : 'Errore sconosciuto' })
+      setSplitDialogOpen(true)
+    } finally {
+      setIsCutting(false)
+    }
+  }, [stlFile, selectedPlaneId, cuttingResult, planeParams])
 
   const currentPlaneParams = selectedPlaneId ? (planeParams[selectedPlaneId] ?? { offset: 0, tiltAngle: 0 }) : { offset: 0, tiltAngle: 0 }
 
@@ -243,6 +281,19 @@ export function ViewerSection({ analysisResult, onAnalysisResultChange, selected
                   >
                     Separa
                   </Button>
+                  <Button
+                    variant="default"
+                    size="xs"
+                    className="bg-green-600 hover:bg-green-700 text-white"
+                    onClick={handleCut}
+                    disabled={isCutting}
+                  >
+                    {isCutting ? (
+                      <><span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin inline-block mr-1" />Taglio...</>
+                    ) : (
+                      '✂ Taglia'
+                    )}
+                  </Button>
                 </div>
               )}
               {analysisResult.cylinderCandidates.map((_, i) => (
@@ -323,6 +374,13 @@ export function ViewerSection({ analysisResult, onAnalysisResultChange, selected
         {annotationMode && stlUrl && annotationTool.state.points.length > 0 && (
           <AnnotationPoints points={annotationTool.state.points} />
         )}
+
+        {/* Cutting result dialog */}
+        <SplitResultDialog
+          open={splitDialogOpen}
+          onOpenChange={setSplitDialogOpen}
+          result={splitResult}
+        />
       </div>
     </div>
   )

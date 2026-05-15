@@ -14,6 +14,7 @@ export default function Home() {
   const [selectedPlaneId, setSelectedPlaneId] = useState<string | null>(null)
   const [planeParams, setPlaneParams] = useState<Record<string, PlaneParams>>({})
   const [fileName, setFileName] = useState('')
+  const [stlFile, setStlFile] = useState<File | null>(null)
 
   const handleAnnotationSave = useCallback(() => {
     setAnnotationCount(prev => prev + 1)
@@ -24,6 +25,7 @@ export default function Home() {
     if (!result) {
       setSelectedPlaneId(null)
       setPlaneParams({})
+      setStlFile(null)
     }
   }, [])
 
@@ -54,6 +56,8 @@ export default function Home() {
           planeParams={planeParams}
           onPlaneParamsChange={setPlaneParams}
           onFileNameChange={setFileName}
+          stlFile={stlFile}
+          onStlFileChange={setStlFile}
         />
       </main>
     </div>
