@@ -1,33 +1,46 @@
 'use client'
 
-import { CuttingPlane, CuttingResult } from '@/lib/cutting-plane'
+import { CuttingPlane, CuttingResult, applyPlaneParams } from '@/lib/cutting-plane'
 import { useMemo } from 'react'
 import * as THREE from 'three'
+import { PlaneParams } from './viewer-section'
 
 interface CuttingPlaneVisualProps {
   cuttingResult: CuttingResult
   selectedPlaneId: string | null
   onPlaneSelect: (id: string | null) => void
+  planeParams: Record<string, PlaneParams>
 }
 
-function PlaneDisk({ plane, selected, onSelect }: {
+function PlaneDisk({ plane, selected, onSelect, params }: {
   plane: CuttingPlane
   selected: boolean
   onSelect: () => void
+  params: PlaneParams
 }) {
   const color = plane.method === 'junction' ? '#f59e0b' : '#10b981'
   const size = 20
 
+  const effectivePlane = useMemo(() => {
+    const modified: CuttingPlane = {
+      ...plane,
+      offset: params.offset,
+      tiltAngle: params.tiltAngle,
+      tiltAxis: plane.tiltAxis,
+    }
+    return applyPlaneParams(modified)
+  }, [plane, params])
+
   const matrix = useMemo(() => {
     const m = new THREE.Matrix4()
     const up = new THREE.Vector3(0, 1, 0)
-    const normal = plane.normal.clone().normalize()
+    const normal = effectivePlane.effectiveNormal.clone().normalize()
 
     const quaternion = new THREE.Quaternion().setFromUnitVectors(up, normal)
     m.makeRotationFromQuaternion(quaternion)
-    m.setPosition(plane.point)
+    m.setPosition(effectivePlane.effectivePoint)
     return m
-  }, [plane.point, plane.normal])
+  }, [effectivePlane])
 
   return (
     <group matrix={matrix} onClick={(e) => { e.stopPropagation(); onSelect() }}>
@@ -58,7 +71,7 @@ function PlaneDisk({ plane, selected, onSelect }: {
   )
 }
 
-export function CuttingPlaneVisual({ cuttingResult, selectedPlaneId, onPlaneSelect }: CuttingPlaneVisualProps) {
+export function CuttingPlaneVisual({ cuttingResult, selectedPlaneId, onPlaneSelect, planeParams }: CuttingPlaneVisualProps) {
   return (
     <group>
       {cuttingResult.planes.map(plane => (
@@ -67,6 +80,7 @@ export function CuttingPlaneVisual({ cuttingResult, selectedPlaneId, onPlaneSele
           plane={plane}
           selected={plane.id === selectedPlaneId}
           onSelect={() => onPlaneSelect(plane.id === selectedPlaneId ? null : plane.id)}
+          params={planeParams[plane.id] ?? { offset: 0, tiltAngle: 0 }}
         />
       ))}
     </group>

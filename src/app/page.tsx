@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback } from 'react'
-import { ViewerSection } from '@/components/viewer/viewer-section'
+import { ViewerSection, PlaneParams } from '@/components/viewer/viewer-section'
 import { Sidebar } from '@/components/layout/sidebar'
 import { MeshAnalysisResult } from '@/lib/mesh-analysis'
 import { CuttingResult } from '@/lib/cutting-plane'
@@ -12,6 +12,7 @@ export default function Home() {
   const [annotationCount, setAnnotationCount] = useState(0)
   const [cuttingResult, setCuttingResult] = useState<CuttingResult | null>(null)
   const [selectedPlaneId, setSelectedPlaneId] = useState<string | null>(null)
+  const [planeParams, setPlaneParams] = useState<Record<string, PlaneParams>>({})
 
   const handleAnnotationSave = useCallback(() => {
     setAnnotationCount(prev => prev + 1)
@@ -19,7 +20,10 @@ export default function Home() {
 
   const handleCuttingResultChange = useCallback((result: CuttingResult | null) => {
     setCuttingResult(result)
-    if (!result) setSelectedPlaneId(null)
+    if (!result) {
+      setSelectedPlaneId(null)
+      setPlaneParams({})
+    }
   }, [])
 
   return (
@@ -44,6 +48,8 @@ export default function Home() {
           onCuttingResultChange={handleCuttingResultChange}
           selectedPlaneId={selectedPlaneId}
           onPlaneSelect={setSelectedPlaneId}
+          planeParams={planeParams}
+          onPlaneParamsChange={setPlaneParams}
         />
       </main>
     </div>

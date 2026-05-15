@@ -10,6 +10,11 @@ import { computeAllCutLines } from '@/lib/mesh-intersection'
 import { useAnnotationTool } from './annotation-tool'
 import * as THREE from 'three'
 
+export interface PlaneParams {
+  offset: number
+  tiltAngle: number
+}
+
 const StlViewer = dynamic(
   () => import('./stl-viewer').then(mod => ({ default: mod.StlViewer })),
   {
@@ -37,9 +42,11 @@ interface ViewerSectionProps {
   onCuttingResultChange: (result: CuttingResult | null) => void
   selectedPlaneId: string | null
   onPlaneSelect: (id: string | null) => void
+  planeParams: Record<string, PlaneParams>
+  onPlaneParamsChange: (params: Record<string, PlaneParams>) => void
 }
 
-export function ViewerSection({ analysisResult, onAnalysisResultChange, selectedImplant, onImplantSelect, onAnnotationSave, cuttingResult, onCuttingResultChange, selectedPlaneId, onPlaneSelect }: ViewerSectionProps) {
+export function ViewerSection({ analysisResult, onAnalysisResultChange, selectedImplant, onImplantSelect, onAnnotationSave, cuttingResult, onCuttingResultChange, selectedPlaneId, onPlaneSelect, planeParams, onPlaneParamsChange }: ViewerSectionProps) {
   const [stlUrl, setStlUrl] = useState<string | null>(null)
   const [fileName, setFileName] = useState<string>('')
   const [showCurvature, setShowCurvature] = useState(false)
@@ -102,6 +109,27 @@ export function ViewerSection({ analysisResult, onAnalysisResultChange, selected
       onAnnotationSave?.()
     }
   }, [annotationTool, fileName, analysisResult, onAnnotationSave])
+
+  const currentPlaneParams = selectedPlaneId ? (planeParams[selectedPlaneId] ?? { offset: 0, tiltAngle: 0 }) : { offset: 0, tiltAngle: 0 }
+
+  const updatePlaneParam = useCallback((key: 'offset' | 'tiltAngle', value: number) => {
+    if (!selectedPlaneId) return
+    onPlaneParamsChange({
+      ...planeParams,
+      [selectedPlaneId]: {
+        ...(planeParams[selectedPlaneId] ?? { offset: 0, tiltAngle: 0 }),
+        [key]: value,
+      },
+    })
+  }, [selectedPlaneId, planeParams, onPlaneParamsChange])
+
+  const resetPlaneParams = useCallback(() => {
+    if (!selectedPlaneId) return
+    onPlaneParamsChange({
+      ...planeParams,
+      [selectedPlaneId]: { offset: 0, tiltAngle: 0 },
+    })
+  }, [selectedPlaneId, planeParams, onPlaneParamsChange])
 
   return (
     <div className="h-full flex flex-col">
@@ -166,6 +194,33 @@ export function ViewerSection({ analysisResult, onAnalysisResultChange, selected
               <span className="text-xs text-muted-foreground">
                 {analysisResult.cylinderCandidates.length} impianto/i
               </span>
+              {selectedPlaneId && (
+                <div className="flex items-center gap-3 border-l pl-3 ml-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground whitespace-nowrap">Offset</span>
+                    <Slider
+                      min={-10} max={10} step={0.5}
+                      value={[currentPlaneParams.offset]}
+                      onValueChange={(v) => updatePlaneParam('offset', Array.isArray(v) ? v[0] : v as number)}
+                      className="w-24"
+                    />
+                    <span className="text-xs w-12 text-right">{currentPlaneParams.offset > 0 ? '+' : ''}{currentPlaneParams.offset.toFixed(1)}mm</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground whitespace-nowrap">Tilt</span>
+                    <Slider
+                      min={-30} max={30} step={1}
+                      value={[currentPlaneParams.tiltAngle]}
+                      onValueChange={(v) => updatePlaneParam('tiltAngle', Array.isArray(v) ? v[0] : v as number)}
+                      className="w-24"
+                    />
+                    <span className="text-xs w-10 text-right">{currentPlaneParams.tiltAngle > 0 ? '+' : ''}{currentPlaneParams.tiltAngle}°</span>
+                  </div>
+                  <Button variant="outline" size="xs" onClick={resetPlaneParams}>
+                    Reset
+                  </Button>
+                </div>
+              )}
               {analysisResult.cylinderCandidates.map((_, i) => (
                 <Button
                   key={i}
@@ -200,6 +255,7 @@ export function ViewerSection({ analysisResult, onAnalysisResultChange, selected
             cuttingResult={showCuttingPlanes ? cuttingResult : null}
             selectedPlaneId={selectedPlaneId}
             onPlaneSelect={onPlaneSelect}
+            planeParams={planeParams}
           />
         ) : (
           /* BIG upload area — the input IS the button */

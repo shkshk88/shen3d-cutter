@@ -11,6 +11,7 @@ import { CuttingPlaneVisual } from './cutting-plane-visual'
 import { CutLineVisual } from './cut-line-visual'
 import { MeshAnalysisResult } from '@/lib/mesh-analysis'
 import { CuttingResult } from '@/lib/cutting-plane'
+import { PlaneParams } from './viewer-section'
 
 interface StlViewerProps {
   url: string
@@ -25,12 +26,13 @@ interface StlViewerProps {
   cuttingResult: CuttingResult | null
   selectedPlaneId: string | null
   onPlaneSelect: (id: string | null) => void
+  planeParams: Record<string, PlaneParams>
 }
 
 export function StlViewer({
   url, analysisResult, selectedImplant, onImplantSelect, onAnalysisComplete,
   showCurvature, curvatureOpacity, annotationMode, onMeshClick,
-  cuttingResult, selectedPlaneId, onPlaneSelect
+  cuttingResult, selectedPlaneId, onPlaneSelect, planeParams
 }: StlViewerProps) {
   const handleCanvasClick = useCallback((e: THREE.Event & { point?: THREE.Vector3 }) => {
     if (annotationMode && onMeshClick && e.point) {
@@ -78,6 +80,7 @@ export function StlViewer({
           cuttingResult={cuttingResult}
           selectedPlaneId={selectedPlaneId}
           onPlaneSelect={onPlaneSelect}
+          planeParams={planeParams}
         />
       )}
 
