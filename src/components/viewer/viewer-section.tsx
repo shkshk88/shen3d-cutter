@@ -46,6 +46,12 @@ export function ViewerSection({ analysisResult, onAnalysisResultChange, selected
   const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
+    const ext = file.name.split('.').pop()?.toLowerCase()
+    if (ext !== 'stl') {
+      alert('Seleziona un file .stl')
+      e.target.value = ''
+      return
+    }
     const url = URL.createObjectURL(file)
     setStlUrl(url)
     setFileName(file.name)
@@ -99,7 +105,7 @@ export function ViewerSection({ analysisResult, onAnalysisResultChange, selected
         <span className="text-sm font-medium whitespace-nowrap">{fileName || 'Nessun file caricato'}</span>
         <label className="cursor-pointer inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground h-9 px-3">
           Carica STL
-          <input id="stl-upload" type="file" accept=".stl" onChange={handleFileUpload} className="sr-only" />
+          <input id="stl-upload" type="file" onChange={handleFileUpload} className="sr-only" />
         </label>
 
         {stlUrl && (
