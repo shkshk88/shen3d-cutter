@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { downloadAnnotations } from '@/lib/export-annotations'
@@ -7,6 +8,8 @@ import { downloadCuttingParams } from '@/lib/export-cutting'
 import { MeshAnalysisResult } from '@/lib/mesh-analysis'
 import { CuttingResult, CuttingPlane } from '@/lib/cutting-plane'
 import { PlaneParams } from '@/components/viewer/viewer-section'
+import { DENTAL_PROFILES, DentalProfile } from '@/lib/profiles'
+import { ProfilePreview } from '@/components/viewer/profile-preview'
 import * as THREE from 'three'
 
 interface SidebarProps {
@@ -65,6 +68,8 @@ export function Sidebar({ analysisResult, selectedImplant, onImplantSelect, anno
   if (analysisResult?.boundingBox) {
     analysisResult.boundingBox.getSize(size!)
   }
+
+  const [selectedProfile, setSelectedProfile] = useState<DentalProfile | null>(null)
 
   return (
     <aside className="w-64 border-r bg-card flex flex-col h-full">
@@ -142,6 +147,37 @@ export function Sidebar({ analysisResult, selectedImplant, onImplantSelect, anno
           </div>
         ) : (
           <p className="text-sm text-muted-foreground">Nessun piano generato</p>
+        )}
+      </div>
+      <Separator />
+
+      {/* Profili dentali */}
+      <div className="p-4 space-y-2">
+        <p className="text-sm font-medium text-muted-foreground">PROFILI</p>
+        <div className="space-y-1">
+          {DENTAL_PROFILES.map((profile) => (
+            <div
+              key={profile.id}
+              className={`p-2 rounded text-xs cursor-pointer
+                ${selectedProfile?.id === profile.id ? 'bg-indigo-500/20 border border-indigo-500' : 'bg-muted'}`}
+              onClick={() => setSelectedProfile(selectedProfile?.id === profile.id ? null : profile)}
+            >
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full" style={{
+                  backgroundColor: profile.type === 'd_shape' ? '#6366f1' : profile.type === 'oval' ? '#f59e0b' : '#10b981'
+                }} />
+                <span className="font-medium">{profile.name}</span>
+              </div>
+              <p className="text-[10px] text-muted-foreground mt-0.5">{profile.description}</p>
+            </div>
+          ))}
+        </div>
+        {selectedProfile && (
+          <ProfilePreview
+            profileType={selectedProfile.type}
+            profileParams={selectedProfile.params}
+            profileId={selectedProfile.id}
+          />
         )}
       </div>
       <Separator />
