@@ -7,7 +7,10 @@ import * as THREE from 'three'
 import { StlModel } from './stl-model'
 import { LoadingSpinner } from './loading-spinner'
 import { ImplantMarker } from './implant-marker'
+import { CuttingPlaneVisual } from './cutting-plane-visual'
+import { CutLineVisual } from './cut-line-visual'
 import { MeshAnalysisResult } from '@/lib/mesh-analysis'
+import { CuttingResult } from '@/lib/cutting-plane'
 
 interface StlViewerProps {
   url: string
@@ -19,11 +22,15 @@ interface StlViewerProps {
   curvatureOpacity: number
   annotationMode?: boolean
   onMeshClick?: (point: THREE.Vector3) => void
+  cuttingResult: CuttingResult | null
+  selectedPlaneId: string | null
+  onPlaneSelect: (id: string | null) => void
 }
 
 export function StlViewer({
   url, analysisResult, selectedImplant, onImplantSelect, onAnalysisComplete,
-  showCurvature, curvatureOpacity, annotationMode, onMeshClick
+  showCurvature, curvatureOpacity, annotationMode, onMeshClick,
+  cuttingResult, selectedPlaneId, onPlaneSelect
 }: StlViewerProps) {
   const handleCanvasClick = useCallback((e: THREE.Event & { point?: THREE.Vector3 }) => {
     if (annotationMode && onMeshClick && e.point) {
@@ -65,6 +72,18 @@ export function StlViewer({
           onClick={() => onImplantSelect(selectedImplant === i ? null : i)}
         />
       ))}
+
+      {cuttingResult && (
+        <CuttingPlaneVisual
+          cuttingResult={cuttingResult}
+          selectedPlaneId={selectedPlaneId}
+          onPlaneSelect={onPlaneSelect}
+        />
+      )}
+
+      {cuttingResult && cuttingResult.lines.length > 0 && (
+        <CutLineVisual lines={cuttingResult.lines} />
+      )}
 
       <ContactShadows position={[0, -30, 0]} opacity={0.4} scale={100} blur={2} />
       <OrbitControls makeDefault enableDamping dampingFactor={0.1} />

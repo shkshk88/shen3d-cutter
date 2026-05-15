@@ -1,10 +1,12 @@
 'use client'
 
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import dynamic from 'next/dynamic'
 import { Button } from '@/components/ui/button'
 import { Slider } from '@/components/ui/slider'
 import { MeshAnalysisResult } from '@/lib/mesh-analysis'
+import { computeCuttingResult, CuttingResult } from '@/lib/cutting-plane'
+import { computeAllCutLines } from '@/lib/mesh-intersection'
 import { useAnnotationTool } from './annotation-tool'
 import * as THREE from 'three'
 
@@ -40,6 +42,9 @@ export function ViewerSection({ analysisResult, onAnalysisResultChange, selected
   const [curvatureOpacity, setCurvatureOpacity] = useState(0.7)
   const [annotationMode, setAnnotationMode] = useState(false)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
+  const [cuttingResult, setCuttingResult] = useState<CuttingResult | null>(null)
+  const [selectedPlaneId, setSelectedPlaneId] = useState<string | null>(null)
+  const [showCuttingPlanes, setShowCuttingPlanes] = useState(true)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const annotationTool = useAnnotationTool()
@@ -58,6 +63,8 @@ export function ViewerSection({ analysisResult, onAnalysisResultChange, selected
     setShowCurvature(false)
     setAnnotationMode(false)
     setIsAnalyzing(true)
+    setCuttingResult(null)
+    setSelectedPlaneId(null)
   }, [onAnalysisResultChange, onImplantSelect])
 
   const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -74,6 +81,8 @@ export function ViewerSection({ analysisResult, onAnalysisResultChange, selected
   const handleAnalysisComplete = useCallback((result: MeshAnalysisResult) => {
     onAnalysisResultChange(result)
     setIsAnalyzing(false)
+    const cutting = computeCuttingResult(result)
+    setCuttingResult(cutting)
   }, [onAnalysisResultChange])
 
   const handleMeshClick = useCallback((point: THREE.Vector3) => {
@@ -146,6 +155,13 @@ export function ViewerSection({ analysisResult, onAnalysisResultChange, selected
 
           {analysisResult && (
             <div className="flex items-center gap-2 ml-auto">
+              <Button
+                variant={showCuttingPlanes ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setShowCuttingPlanes(!showCuttingPlanes)}
+              >
+                Taglio
+              </Button>
               <span className="text-xs text-muted-foreground">
                 {analysisResult.cylinderCandidates.length} impianto/i
               </span>
@@ -180,6 +196,9 @@ export function ViewerSection({ analysisResult, onAnalysisResultChange, selected
             curvatureOpacity={curvatureOpacity}
             annotationMode={annotationMode}
             onMeshClick={handleMeshClick}
+            cuttingResult={showCuttingPlanes ? cuttingResult : null}
+            selectedPlaneId={selectedPlaneId}
+            onPlaneSelect={setSelectedPlaneId}
           />
         ) : (
           /* BIG upload area — the input IS the button */
