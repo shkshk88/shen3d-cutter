@@ -7,6 +7,8 @@ import { Slider } from '@/components/ui/slider'
 import { MeshAnalysisResult } from '@/lib/mesh-analysis'
 import { computeCuttingResult, CuttingResult, applyPlaneParams, CuttingPlane } from '@/lib/cutting-plane'
 import { fitChannelFromSeed, computeInsertionAxis } from '@/lib/screw-channels'
+import { proposeSplitCurve, saveCurveToStorage, loadCurveFromStorage } from '@/lib/split-curve'
+import { useSplitCurveTool } from './split-curve-tool'
 import { useAnnotationTool } from './annotation-tool'
 import { uploadStlToServer, splitStl, SplitResult } from '@/lib/cutter-client'
 import { SplitResultDialog } from './split-result-dialog'
@@ -64,10 +66,22 @@ export function ViewerSection({ analysisResult, onAnalysisResultChange, selected
   const [splitResult, setSplitResult] = useState<SplitResult | null>(null)
   const [splitDialogOpen, setSplitDialogOpen] = useState(false)
   const [channelAddMode, setChannelAddMode] = useState(false)
+  const [curveMode, setCurveMode] = useState(false)
+  const [geometry, setGeometry] = useState<THREE.BufferGeometry | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const geometryRef = useRef<THREE.BufferGeometry | null>(null)
 
   const annotationTool = useAnnotationTool()
+  const curveTool = useSplitCurveTool({
+    geometry,
+    channels: analysisResult?.channels ?? [],
+    insertionAxis: analysisResult?.insertionAxis ?? null,
+  })
+
+  // Persistenza della curva per file (localStorage)
+  useEffect(() => {
+    if (!fileName || curveTool.curve.controlPoints.length === 0) return
+    saveCurveToStorage(fileName, curveTool.curve)
+  }, [fileName, curveTool.curve])
 
   const handleFile = useCallback((file: File) => {
     const ext = file.name.split('.').pop()?.toLowerCase()
@@ -86,8 +100,12 @@ export function ViewerSection({ analysisResult, onAnalysisResultChange, selected
     setIsAnalyzing(true)
     onCuttingResultChange(null)
     setSplitResult(null)
+    setCurveMode(false)
+    setChannelAddMode(false)
+    setGeometry(null)
+    curveTool.clear()
     onStlFileChange?.(file)
-  }, [onAnalysisResultChange, onImplantSelect, onFileNameChange, onStlFileChange])
+  }, [onAnalysisResultChange, onImplantSelect, onFileNameChange, onStlFileChange, curveTool])
 
   const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -105,11 +123,28 @@ export function ViewerSection({ analysisResult, onAnalysisResultChange, selected
     setIsAnalyzing(false)
     const cutting = computeCuttingResult(result)
     onCuttingResultChange(cutting)
-  }, [onAnalysisResultChange, onCuttingResultChange])
+    // Ripristina la curva di split salvata per questo file, se esiste
+    const stored = fileName ? loadCurveFromStorage(fileName) : null
+    if (stored && stored.controlPoints.length > 0) {
+      curveTool.setCurve(stored)
+    }
+  }, [onAnalysisResultChange, onCuttingResultChange, fileName, curveTool])
 
   const handleMeshClick = useCallback((point: THREE.Vector3) => {
+    if (curveMode) {
+      // Click vicino al primo punto → chiude il loop
+      if (
+        curveTool.canClose &&
+        curveTool.curve.controlPoints.length >= 3 &&
+        point.distanceTo(curveTool.curve.controlPoints[0]) < 1.5
+      ) {
+        curveTool.closeLoop()
+      } else if (!curveTool.curve.closed) {
+        curveTool.addPoint(point)
+      }
+      return
+    }
     if (channelAddMode) {
-      const geometry = geometryRef.current
       if (!geometry || !analysisResult) return
       const channel = fitChannelFromSeed(geometry, analysisResult.graph, point)
       if (channel) {
@@ -128,7 +163,22 @@ export function ViewerSection({ analysisResult, onAnalysisResultChange, selected
     if (annotationMode) {
       annotationTool.addPoint(point)
     }
-  }, [channelAddMode, annotationMode, annotationTool, analysisResult, onAnalysisResultChange])
+  }, [curveMode, curveTool, channelAddMode, annotationMode, annotationTool, geometry, analysisResult, onAnalysisResultChange])
+
+  const handleProposeCurve = useCallback(() => {
+    if (!analysisResult) return
+    const proposed = proposeSplitCurve({
+      graph: analysisResult.graph,
+      channels: analysisResult.channels,
+      insertionAxis: analysisResult.insertionAxis,
+      geometry,
+    })
+    if (proposed) {
+      curveTool.setCurve(proposed)
+    } else {
+      alert('Impossibile proporre una curva: silhouette non trovata a quella quota')
+    }
+  }, [analysisResult, geometry, curveTool])
 
   const handleSaveAnnotation = useCallback(() => {
     if (!fileName) return
@@ -261,11 +311,43 @@ export function ViewerSection({ analysisResult, onAnalysisResultChange, selected
               <Button
                 variant={channelAddMode ? 'default' : 'outline'}
                 size="sm"
-                onClick={() => { setChannelAddMode(!channelAddMode); if (!channelAddMode) setAnnotationMode(false) }}
+                onClick={() => { setChannelAddMode(!channelAddMode); if (!channelAddMode) { setAnnotationMode(false); setCurveMode(false) } }}
                 title="Clicca dentro un camino vite non rilevato per aggiungerlo"
               >
                 + Canale
               </Button>
+              <Button
+                variant={curveMode ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => { setCurveMode(!curveMode); if (!curveMode) { setAnnotationMode(false); setChannelAddMode(false) } }}
+                title="Disegna la curva di split sulla superficie"
+              >
+                Curva {curveTool.curve.controlPoints.length > 0 ? `(${curveTool.curve.controlPoints.length})` : ''}
+              </Button>
+              {curveMode && (
+                <div className="flex items-center gap-1 border-l pl-2">
+                  <Button variant="outline" size="xs" onClick={handleProposeCurve} title="Curva proposta automaticamente dalla silhouette">
+                    ✨ Proponi
+                  </Button>
+                  <Button variant="outline" size="xs" onClick={curveTool.closeLoop} disabled={!curveTool.canClose}>
+                    Chiudi loop
+                  </Button>
+                  <Button variant="outline" size="xs" onClick={curveTool.undo} disabled={!curveTool.canUndo}>
+                    Undo
+                  </Button>
+                  <Button variant="outline" size="xs" onClick={curveTool.clear} disabled={curveTool.curve.controlPoints.length === 0}>
+                    Clear
+                  </Button>
+                  {curveTool.curve.closed && (
+                    <span
+                      className={`text-xs px-2 py-0.5 rounded whitespace-nowrap ${curveTool.validation.valid ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}
+                      title={curveTool.validation.errors.join(' · ')}
+                    >
+                      {curveTool.validation.valid ? '✓ valida' : '✗ ' + curveTool.validation.errors[0]}
+                    </span>
+                  )}
+                </div>
+              )}
               <Button
                 variant={showCuttingPlanes ? 'default' : 'outline'}
                 size="sm"
@@ -352,9 +434,12 @@ export function ViewerSection({ analysisResult, onAnalysisResultChange, selected
             onAnalysisComplete={handleAnalysisComplete}
             showCurvature={showCurvature}
             curvatureOpacity={curvatureOpacity}
-            annotationMode={annotationMode || channelAddMode}
+            annotationMode={annotationMode || channelAddMode || curveMode}
             onMeshClick={handleMeshClick}
-            onGeometryReady={(g) => { geometryRef.current = g }}
+            onGeometryReady={setGeometry}
+            splitCurveTool={curveTool}
+            curveEditMode={curveMode}
+            modelGeometry={geometry}
             cuttingResult={showCuttingPlanes ? cuttingResult : null}
             selectedPlaneId={selectedPlaneId}
             onPlaneSelect={onPlaneSelect}

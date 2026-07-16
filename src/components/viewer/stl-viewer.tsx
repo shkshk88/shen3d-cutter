@@ -14,6 +14,8 @@ import { MeshAnalysisResult } from '@/lib/mesh-analysis'
 import { CuttingResult, CuttingPlane } from '@/lib/cutting-plane'
 import { intersectPlaneMesh } from '@/lib/mesh-intersection'
 import { PlaneParams } from './viewer-section'
+import { SplitCurveVisual } from './split-curve-visual'
+import { SplitCurveTool } from './split-curve-tool'
 
 interface SeparationPlane {
   normal: THREE.Vector3
@@ -31,6 +33,9 @@ interface StlViewerProps {
   annotationMode?: boolean
   onMeshClick?: (point: THREE.Vector3) => void
   onGeometryReady?: (geometry: THREE.BufferGeometry) => void
+  splitCurveTool?: SplitCurveTool
+  curveEditMode?: boolean
+  modelGeometry?: THREE.BufferGeometry | null
   cuttingResult: CuttingResult | null
   selectedPlaneId: string | null
   onPlaneSelect: (id: string | null) => void
@@ -43,6 +48,7 @@ interface StlViewerProps {
 export function StlViewer({
   url, analysisResult, selectedImplant, onImplantSelect, onAnalysisComplete,
   showCurvature, curvatureOpacity, annotationMode, onMeshClick, onGeometryReady,
+  splitCurveTool, curveEditMode, modelGeometry,
   cuttingResult, selectedPlaneId, onPlaneSelect, planeParams, onPlaneParamsChange,
   showSeparation, separationPlane
 }: StlViewerProps) {
@@ -117,6 +123,22 @@ export function StlViewer({
           />
         </Bounds>
       </Suspense>
+
+      {splitCurveTool && splitCurveTool.curve.controlPoints.length > 0 && (
+        <SplitCurveVisual
+          curve={splitCurveTool.curve}
+          densified={splitCurveTool.densified}
+          selectedIndex={splitCurveTool.selectedIndex}
+          geometry={modelGeometry ?? null}
+          editable={!!curveEditMode}
+          valid={splitCurveTool.validation.valid || !splitCurveTool.curve.closed}
+          onSelectPoint={splitCurveTool.selectPoint}
+          onMovePoint={splitCurveTool.movePoint}
+          onBeginDrag={splitCurveTool.beginDrag}
+          onInsertPoint={splitCurveTool.insertPointNear}
+          onDeletePoint={splitCurveTool.deletePoint}
+        />
+      )}
 
       {analysisResult?.insertionAxis && analysisResult.channels.length > 0 && (
         <InsertionAxisWidget
