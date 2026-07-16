@@ -1,7 +1,7 @@
 'use client'
 
 import { Canvas } from '@react-three/fiber'
-import { OrbitControls, ContactShadows } from '@react-three/drei'
+import { OrbitControls, ContactShadows, Bounds } from '@react-three/drei'
 import { Suspense, useCallback, useState, useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import { StlModel } from './stl-model'
@@ -77,6 +77,24 @@ export function StlViewer({
     })
   }, [cuttingResult, planeParams, hasParams])
 
+  // Scena in mm reali: griglia e ombre si posizionano sotto il bounding box
+  // del modello (la geometria non viene più centrata/scalata)
+  const sceneFrame = useMemo(() => {
+    const box = analysisResult?.boundingBox
+    if (!box) return null
+    const center = new THREE.Vector3()
+    const size = new THREE.Vector3()
+    box.getCenter(center)
+    box.getSize(size)
+    const maxDim = Math.max(size.x, size.y, size.z)
+    return {
+      groundY: box.min.y - maxDim * 0.05,
+      centerX: center.x,
+      centerZ: center.z,
+      extent: maxDim,
+    }
+  }, [analysisResult])
+
   return (
     <Canvas
       camera={{ position: [0, 0, 100], fov: 50 }}
@@ -89,17 +107,19 @@ export function StlViewer({
       <directionalLight position={[-50, -50, -25]} intensity={0.3} />
 
       <Suspense fallback={<LoadingSpinner />}>
-        <StlModel
-          url={url}
-          onAnalysisComplete={onAnalysisComplete}
-          showCurvature={showCurvature}
-          curvatureOpacity={curvatureOpacity}
-          annotationMode={annotationMode}
-          onMeshClick={onMeshClick}
-          onGeometryReady={handleGeometryReady}
-          showSeparation={showSeparation}
-          separationPlane={separationPlane}
-        />
+        <Bounds fit clip observe margin={1.3}>
+          <StlModel
+            url={url}
+            onAnalysisComplete={onAnalysisComplete}
+            showCurvature={showCurvature}
+            curvatureOpacity={curvatureOpacity}
+            annotationMode={annotationMode}
+            onMeshClick={onMeshClick}
+            onGeometryReady={handleGeometryReady}
+            showSeparation={showSeparation}
+            separationPlane={separationPlane}
+          />
+        </Bounds>
       </Suspense>
 
       {analysisResult?.cylinderCandidates.map((cyl, i) => (
@@ -129,9 +149,21 @@ export function StlViewer({
         <CutLineVisual lines={computedLines} />
       )}
 
-      <ContactShadows position={[0, -30, 0]} opacity={0.4} scale={100} blur={2} />
+      {sceneFrame && (
+        <>
+          <ContactShadows
+            position={[sceneFrame.centerX, sceneFrame.groundY, sceneFrame.centerZ]}
+            opacity={0.4}
+            scale={sceneFrame.extent * 2}
+            blur={2}
+          />
+          <gridHelper
+            args={[sceneFrame.extent * 3, 24, '#333', '#222']}
+            position={[sceneFrame.centerX, sceneFrame.groundY, sceneFrame.centerZ]}
+          />
+        </>
+      )}
       <OrbitControls makeDefault enableDamping dampingFactor={0.1} />
-      <gridHelper args={[200, 20, '#333', '#222']} position={[0, -30, 0]} />
     </Canvas>
   )
 }

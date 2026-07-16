@@ -4,10 +4,14 @@ import { useLoader } from '@react-three/fiber'
 import { STLLoader } from 'three-stdlib'
 import * as THREE from 'three'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { computeBoundsTree, disposeBoundsTree, acceleratedRaycast } from 'three-mesh-bvh'
 import { analyzeMesh, MeshAnalysisResult } from '@/lib/mesh-analysis'
 import { applyCurvatureColors } from './curvature-visualization'
-import { CuttingPlane, applyPlaneParams } from '@/lib/cutting-plane'
-import { PlaneParams } from './viewer-section'
+
+// Raycast accelerato via BVH su tutte le mesh (mesh dentali: 100k-1M triangoli)
+THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree
+THREE.BufferGeometry.prototype.disposeBoundsTree = disposeBoundsTree
+THREE.Mesh.prototype.raycast = acceleratedRaycast
 
 interface SeparationPlane {
   normal: THREE.Vector3
@@ -65,26 +69,22 @@ export function StlModel({ url, onAnalysisComplete, showCurvature, curvatureOpac
 
   useEffect(() => {
     if (!geometry) return
+    // I vertici restano nelle coordinate originali del file STL (millimetri).
+    // La vista viene adattata dalla camera (<Bounds> in stl-viewer), NON scalando
+    // la geometria: i parametri clinici (gap cemento in µm, raggi canali) devono
+    // arrivare al backend in mm reali.
     geometry.computeBoundingBox()
-    const box = geometry.boundingBox!
-    const center = new THREE.Vector3()
-    box.getCenter(center)
-    geometry.translate(-center.x, -center.y, -center.z)
-
-    const size = new THREE.Vector3()
-    box.getSize(size)
-    const maxDim = Math.max(size.x, size.y, size.z)
-    if (maxDim > 0) {
-      const scale = 80 / maxDim
-      geometry.scale(scale, scale, scale)
-    }
-
     geometry.computeVertexNormals()
+    geometry.computeBoundsTree()
 
     const result = analyzeMesh(geometry)
     setAnalysisData(result)
     onAnalysisComplete?.(result)
     onGeometryReady?.(geometry)
+
+    return () => {
+      geometry.disposeBoundsTree()
+    }
   }, [geometry])
 
   useEffect(() => {
