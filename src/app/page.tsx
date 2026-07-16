@@ -5,6 +5,7 @@ import { ViewerSection, PlaneParams } from '@/components/viewer/viewer-section'
 import { Sidebar } from '@/components/layout/sidebar'
 import { MeshAnalysisResult } from '@/lib/mesh-analysis'
 import { CuttingResult } from '@/lib/cutting-plane'
+import { computeInsertionAxis } from '@/lib/screw-channels'
 
 export default function Home() {
   const [analysisResult, setAnalysisResult] = useState<MeshAnalysisResult | null>(null)
@@ -18,6 +19,15 @@ export default function Home() {
 
   const handleAnnotationSave = useCallback(() => {
     setAnnotationCount(prev => prev + 1)
+  }, [])
+
+  const handleChannelRemove = useCallback((index: number) => {
+    setAnalysisResult(prev => {
+      if (!prev) return prev
+      const channels = prev.channels.filter((_, i) => i !== index)
+      return { ...prev, channels, insertionAxis: computeInsertionAxis(channels) }
+    })
+    setSelectedImplant(null)
   }, [])
 
   const handleCuttingResultChange = useCallback((result: CuttingResult | null) => {
@@ -35,6 +45,7 @@ export default function Home() {
         analysisResult={analysisResult}
         selectedImplant={selectedImplant}
         onImplantSelect={setSelectedImplant}
+        onChannelRemove={handleChannelRemove}
         annotationCount={annotationCount}
         cuttingResult={cuttingResult}
         selectedPlaneId={selectedPlaneId}

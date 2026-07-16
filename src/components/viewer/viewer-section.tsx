@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Slider } from '@/components/ui/slider'
 import { MeshAnalysisResult } from '@/lib/mesh-analysis'
 import { computeCuttingResult, CuttingResult, applyPlaneParams, CuttingPlane } from '@/lib/cutting-plane'
-import { computeAllCutLines } from '@/lib/mesh-intersection'
+import { fitChannelFromSeed, computeInsertionAxis } from '@/lib/screw-channels'
 import { useAnnotationTool } from './annotation-tool'
 import { uploadStlToServer, splitStl, SplitResult } from '@/lib/cutter-client'
 import { SplitResultDialog } from './split-result-dialog'
@@ -63,7 +63,9 @@ export function ViewerSection({ analysisResult, onAnalysisResultChange, selected
   const [isCutting, setIsCutting] = useState(false)
   const [splitResult, setSplitResult] = useState<SplitResult | null>(null)
   const [splitDialogOpen, setSplitDialogOpen] = useState(false)
+  const [channelAddMode, setChannelAddMode] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const geometryRef = useRef<THREE.BufferGeometry | null>(null)
 
   const annotationTool = useAnnotationTool()
 
@@ -106,16 +108,33 @@ export function ViewerSection({ analysisResult, onAnalysisResultChange, selected
   }, [onAnalysisResultChange, onCuttingResultChange])
 
   const handleMeshClick = useCallback((point: THREE.Vector3) => {
+    if (channelAddMode) {
+      const geometry = geometryRef.current
+      if (!geometry || !analysisResult) return
+      const channel = fitChannelFromSeed(geometry, analysisResult.graph, point)
+      if (channel) {
+        const channels = [...analysisResult.channels, channel]
+        onAnalysisResultChange({
+          ...analysisResult,
+          channels,
+          insertionAxis: computeInsertionAxis(channels),
+        })
+        setChannelAddMode(false)
+      } else {
+        alert('Nessun camino trovato vicino al punto cliccato — clicca dentro o vicino al canale')
+      }
+      return
+    }
     if (annotationMode) {
       annotationTool.addPoint(point)
     }
-  }, [annotationMode, annotationTool])
+  }, [channelAddMode, annotationMode, annotationTool, analysisResult, onAnalysisResultChange])
 
   const handleSaveAnnotation = useCallback(() => {
     if (!fileName) return
     const result = annotationTool.save(
       fileName,
-      analysisResult?.cylinderCandidates.length ?? 0
+      analysisResult?.channels.length ?? 0
     )
     if (result) {
       onAnnotationSave?.()
@@ -240,6 +259,14 @@ export function ViewerSection({ analysisResult, onAnalysisResultChange, selected
           {analysisResult && (
             <div className="flex items-center gap-2 ml-auto">
               <Button
+                variant={channelAddMode ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => { setChannelAddMode(!channelAddMode); if (!channelAddMode) setAnnotationMode(false) }}
+                title="Clicca dentro un camino vite non rilevato per aggiungerlo"
+              >
+                + Canale
+              </Button>
+              <Button
                 variant={showCuttingPlanes ? 'default' : 'outline'}
                 size="sm"
                 onClick={() => setShowCuttingPlanes(!showCuttingPlanes)}
@@ -247,7 +274,7 @@ export function ViewerSection({ analysisResult, onAnalysisResultChange, selected
                 Taglio
               </Button>
               <span className="text-xs text-muted-foreground">
-                {analysisResult.cylinderCandidates.length} impianto/i
+                {analysisResult.channels.length} canale/i
               </span>
               {selectedPlaneId && (
                 <div className="flex items-center gap-3 border-l pl-3 ml-1">
@@ -296,7 +323,7 @@ export function ViewerSection({ analysisResult, onAnalysisResultChange, selected
                   </Button>
                 </div>
               )}
-              {analysisResult.cylinderCandidates.map((_, i) => (
+              {analysisResult.channels.map((_, i) => (
                 <Button
                   key={i}
                   variant={selectedImplant === i ? 'default' : 'outline'}
@@ -325,8 +352,9 @@ export function ViewerSection({ analysisResult, onAnalysisResultChange, selected
             onAnalysisComplete={handleAnalysisComplete}
             showCurvature={showCurvature}
             curvatureOpacity={curvatureOpacity}
-            annotationMode={annotationMode}
+            annotationMode={annotationMode || channelAddMode}
             onMeshClick={handleMeshClick}
+            onGeometryReady={(g) => { geometryRef.current = g }}
             cuttingResult={showCuttingPlanes ? cuttingResult : null}
             selectedPlaneId={selectedPlaneId}
             onPlaneSelect={onPlaneSelect}

@@ -78,24 +78,17 @@ function findJunctionPoint(
 export function prepareImplantsForCutting(
   analysisResult: MeshAnalysisResult
 ): ImplantForCutting[] {
-  const normalizedAxis = new THREE.Vector3()
-
-  return analysisResult.cylinderCandidates.map((cyl, index) => {
-    normalizedAxis.copy(cyl.axis).normalize()
-    const height = cyl.height || (cyl.radius * 4)
-
-    const topPoint = cyl.center.clone().add(normalizedAxis.clone().multiplyScalar(height / 2))
-    const bottomPoint = cyl.center.clone().sub(normalizedAxis.clone().multiplyScalar(height / 2))
-
-    const junctionPoint = findJunctionPoint(cyl.center, normalizedAxis, height)
+  return analysisResult.channels.map((channel, index) => {
+    const axis = channel.axis.clone().normalize()
+    const junctionPoint = findJunctionPoint(channel.center, axis, channel.height)
 
     return {
       index,
-      center: cyl.center.clone(),
-      axis: normalizedAxis.clone(),
-      radius: cyl.radius,
-      topPoint,
-      bottomPoint,
+      center: channel.center.clone(),
+      axis,
+      radius: channel.radius,
+      topPoint: channel.top.clone(),
+      bottomPoint: channel.bottom.clone(),
       junctionPoint,
     }
   })

@@ -2,16 +2,17 @@
 
 import { Canvas } from '@react-three/fiber'
 import { OrbitControls, ContactShadows, Bounds } from '@react-three/drei'
-import { Suspense, useCallback, useState, useMemo, useRef } from 'react'
+import { Suspense, useCallback, useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import { StlModel } from './stl-model'
 import { LoadingSpinner } from './loading-spinner'
 import { ImplantMarker } from './implant-marker'
+import { InsertionAxisWidget } from './insertion-axis-widget'
 import { CuttingPlaneVisual } from './cutting-plane-visual'
 import { CutLineVisual } from './cut-line-visual'
 import { MeshAnalysisResult } from '@/lib/mesh-analysis'
-import { CuttingResult, CuttingPlane, applyPlaneParams, CutLine } from '@/lib/cutting-plane'
-import { computeAllCutLines, intersectPlaneMesh } from '@/lib/mesh-intersection'
+import { CuttingResult, CuttingPlane } from '@/lib/cutting-plane'
+import { intersectPlaneMesh } from '@/lib/mesh-intersection'
 import { PlaneParams } from './viewer-section'
 
 interface SeparationPlane {
@@ -29,6 +30,7 @@ interface StlViewerProps {
   curvatureOpacity: number
   annotationMode?: boolean
   onMeshClick?: (point: THREE.Vector3) => void
+  onGeometryReady?: (geometry: THREE.BufferGeometry) => void
   cuttingResult: CuttingResult | null
   selectedPlaneId: string | null
   onPlaneSelect: (id: string | null) => void
@@ -40,22 +42,16 @@ interface StlViewerProps {
 
 export function StlViewer({
   url, analysisResult, selectedImplant, onImplantSelect, onAnalysisComplete,
-  showCurvature, curvatureOpacity, annotationMode, onMeshClick,
+  showCurvature, curvatureOpacity, annotationMode, onMeshClick, onGeometryReady,
   cuttingResult, selectedPlaneId, onPlaneSelect, planeParams, onPlaneParamsChange,
   showSeparation, separationPlane
 }: StlViewerProps) {
   const geometryRef = useRef<THREE.BufferGeometry | null>(null)
-  const [liveCutLines, setLiveCutLines] = useState<CutLine[]>([])
-
-  const handleCanvasClick = useCallback((e: THREE.Event & { point?: THREE.Vector3 }) => {
-    if (annotationMode && onMeshClick && e.point) {
-      onMeshClick(e.point)
-    }
-  }, [annotationMode, onMeshClick])
 
   const handleGeometryReady = useCallback((geometry: THREE.BufferGeometry) => {
     geometryRef.current = geometry
-  }, [])
+    onGeometryReady?.(geometry)
+  }, [onGeometryReady])
 
   const hasParams = Object.keys(planeParams).length > 0
 
@@ -122,13 +118,21 @@ export function StlViewer({
         </Bounds>
       </Suspense>
 
-      {analysisResult?.cylinderCandidates.map((cyl, i) => (
+      {analysisResult?.insertionAxis && analysisResult.channels.length > 0 && (
+        <InsertionAxisWidget
+          axis={analysisResult.insertionAxis}
+          boundingBox={analysisResult.boundingBox}
+        />
+      )}
+
+      {analysisResult?.channels.map((channel, i) => (
         <ImplantMarker
-          key={i}
-          center={cyl.center}
-          axis={cyl.axis}
-          radius={cyl.radius}
-          confidence={cyl.confidence}
+          key={channel.id}
+          center={channel.center}
+          axis={channel.axis}
+          radius={channel.radius}
+          height={channel.height}
+          confidence={channel.confidence}
           index={i}
           isSelected={selectedImplant === i}
           onClick={() => onImplantSelect(selectedImplant === i ? null : i)}

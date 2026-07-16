@@ -16,6 +16,7 @@ interface SidebarProps {
   analysisResult?: MeshAnalysisResult | null
   selectedImplant?: number | null
   onImplantSelect?: (index: number | null) => void
+  onChannelRemove?: (index: number) => void
   annotationCount?: number
   cuttingResult?: CuttingResult | null
   selectedPlaneId?: string | null
@@ -61,7 +62,7 @@ function PlaneCard({ plane, selected, onClick }: {
   )
 }
 
-export function Sidebar({ analysisResult, selectedImplant, onImplantSelect, annotationCount = 0, cuttingResult, selectedPlaneId, onPlaneSelect, fileName, planeParams }: SidebarProps) {
+export function Sidebar({ analysisResult, selectedImplant, onImplantSelect, onChannelRemove, annotationCount = 0, cuttingResult, selectedPlaneId, onPlaneSelect, fileName, planeParams }: SidebarProps) {
   const size = analysisResult?.boundingBox
     ? new THREE.Vector3()
     : null
@@ -79,26 +80,47 @@ export function Sidebar({ analysisResult, selectedImplant, onImplantSelect, anno
       </div>
       <Separator />
 
-      {/* Impianti rilevati */}
+      {/* Camini vite rilevati */}
       <div className="p-4 space-y-2">
-        <p className="text-sm font-medium text-muted-foreground">IMPIANTI RILEVATI</p>
+        <p className="text-sm font-medium text-muted-foreground">CAMINI VITE</p>
         {analysisResult ? (
           <div className="space-y-2">
             <p className="text-sm font-medium">
-              {analysisResult.cylinderCandidates.length} impianto/i rilevato/i
+              {analysisResult.channels.length} canale/i rilevato/i
             </p>
-            {analysisResult.cylinderCandidates.map((cyl, i) => (
+            {analysisResult.channels.map((channel, i) => (
               <div
-                key={i}
+                key={channel.id}
                 className={`p-2 rounded text-xs cursor-pointer
                   ${selectedImplant === i ? 'bg-amber-500/20 border border-amber-500' : 'bg-muted'}`}
                 onClick={() => onImplantSelect?.(selectedImplant === i ? null : i)}
               >
-                <p className="font-medium">Impianto {i + 1}</p>
-                <p>Raggio: {cyl.radius.toFixed(1)}mm</p>
-                <p>Confidenza: {(cyl.confidence * 100).toFixed(0)}%</p>
+                <div className="flex items-center justify-between">
+                  <p className="font-medium">
+                    Canale {i + 1}
+                    {channel.source === 'manual' && (
+                      <span className="ml-1 text-[10px] text-indigo-400">(manuale)</span>
+                    )}
+                  </p>
+                  {onChannelRemove && (
+                    <button
+                      className="text-muted-foreground hover:text-red-400 px-1"
+                      title="Rimuovi canale"
+                      onClick={(e) => { e.stopPropagation(); onChannelRemove(i) }}
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+                <p>Raggio: {channel.radius.toFixed(2)}mm · Altezza: {channel.height.toFixed(1)}mm</p>
+                <p>Confidenza: {(channel.confidence * 100).toFixed(0)}%</p>
               </div>
             ))}
+            {analysisResult.insertionAxis && (
+              <p className="text-[10px] text-muted-foreground">
+                Asse inserzione: ({analysisResult.insertionAxis.x.toFixed(2)}, {analysisResult.insertionAxis.y.toFixed(2)}, {analysisResult.insertionAxis.z.toFixed(2)})
+              </p>
+            )}
           </div>
         ) : (
           <p className="text-sm text-muted-foreground">Nessun modello caricato</p>
@@ -114,7 +136,7 @@ export function Sidebar({ analysisResult, selectedImplant, onImplantSelect, anno
             <p>Vertici: {analysisResult.vertexCount.toLocaleString()}</p>
             <p>Facce: {analysisResult.faceCount.toLocaleString()}</p>
             <p>Feature: {analysisResult.highCurvatureIndices.length.toLocaleString()}</p>
-            <p>Impianti: {analysisResult.cylinderCandidates.length}</p>
+            <p>Camini vite: {analysisResult.channels.length}</p>
             <p>Annotazioni: {annotationCount}</p>
             {size && (
               <>
