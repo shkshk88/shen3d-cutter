@@ -63,6 +63,9 @@ export function SplitCurveVisual({
     setDraggingIndex(index)
 
     const orbitControls = controls as unknown as { enabled: boolean } | null
+    // OrbitControls va disabilitato durante il drag (mutazione imperativa
+    // dell'istanza three, non di stato React)
+    // eslint-disable-next-line react-hooks/immutability
     if (orbitControls) orbitControls.enabled = false
 
     const handleMove = (ev: PointerEvent) => {
