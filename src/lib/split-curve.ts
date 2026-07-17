@@ -16,6 +16,8 @@ export interface SplitCurve {
 export interface CurveValidation {
   valid: boolean
   errors: string[]
+  /** Condizioni non bloccanti (es. curva rasente a un canale in zona a parete sottile) */
+  warnings: string[]
 }
 
 export const EMPTY_SPLIT_CURVE: SplitCurve = { controlPoints: [], closed: false }
@@ -113,13 +115,18 @@ export function resampleUniform(
 // Validazione
 // ---------------------------------------------------------------------------
 
-/** Distanza punto → asse del canale (solo dentro l'estensione assiale) */
-function distanceToChannelWall(point: THREE.Vector3, channel: ScrewChannel): number {
+/**
+ * Distanza CON SEGNO del punto dalla parete del canale (negativa = dentro il
+ * vuoto del tubo), solo dentro l'estensione assiale. La curva non deve
+ * attraversare il vuoto della vite; passare vicino alla parete dall'esterno è
+ * accettabile (la pipeline clippa comunque i camini all'anatomia).
+ */
+function signedDistanceToChannelWall(point: THREE.Vector3, channel: ScrewChannel): number {
   const rel = new THREE.Vector3().subVectors(point, channel.bottom)
   const t = rel.dot(channel.axis)
   if (t < -1 || t > channel.height + 1) return Infinity
   const perp = rel.clone().addScaledVector(channel.axis, -t)
-  return Math.abs(perp.length() - channel.radius)
+  return perp.length() - channel.radius
 }
 
 /** Test intersezione segmenti 2D */
@@ -145,9 +152,10 @@ export function validateSplitCurve(
   densified: THREE.Vector3[],
   channels: ScrewChannel[],
   insertionAxis: THREE.Vector3 | null,
-  minChannelClearance = 0.8
+  minChannelClearance = 0.3
 ): CurveValidation {
   const errors: string[] = []
+  const warnings: string[] = []
 
   if (curve.controlPoints.length < 3) {
     errors.push('Servono almeno 3 punti di controllo')
@@ -159,11 +167,18 @@ export function validateSplitCurve(
   for (let c = 0; c < channels.length; c++) {
     let minDist = Infinity
     for (const p of densified) {
-      const d = distanceToChannelWall(p, channels[c])
+      const d = signedDistanceToChannelWall(p, channels[c])
       if (d < minDist) minDist = d
     }
-    if (minDist < minChannelClearance) {
-      errors.push(`Curva troppo vicina al canale ${c + 1} (${minDist.toFixed(2)}mm < ${minChannelClearance}mm)`)
+    if (minDist < -0.25) {
+      // Nettamente dentro il vuoto della vite (i punti curva sono proiettati
+      // sulla superficie: qui può arrivarci solo una curva corrotta)
+      errors.push(`La curva attraversa il vuoto del canale ${c + 1}`)
+    } else if (minDist < minChannelClearance) {
+      // Tangente o rasente: tipico dei posteriori inclinati che sbucano al
+      // margine — la silhouette segue la parete del tubo. La pipeline clippa
+      // i camini all'anatomia e ri-fora, quindi non è bloccante
+      warnings.push(`Curva rasente al canale ${c + 1} (${minDist.toFixed(2)}mm dalla parete)`)
     }
   }
 
@@ -193,7 +208,7 @@ export function validateSplitCurve(
     }
   }
 
-  return { valid: errors.length === 0, errors }
+  return { valid: errors.length === 0, errors, warnings }
 }
 
 // ---------------------------------------------------------------------------
@@ -409,17 +424,31 @@ export function proposeSplitCurve(input: ProposeCurveInput): SplitCurve | null {
   const grid = new Map<string, number[]>()
   const keyOf = (x: number, y: number, z: number) =>
     `${Math.floor(x / cellSize)}_${Math.floor(y / cellSize)}_${Math.floor(z / cellSize)}`
+  const vert = new THREE.Vector3()
+  const rel = new THREE.Vector3()
+  // Le creste dei rim dei camini NON sono target di snap: attirerebbero la
+  // curva dentro i canali
+  const nearChannel = (p: THREE.Vector3): boolean => {
+    for (const ch of channels) {
+      rel.subVectors(p, ch.bottom)
+      const t = rel.dot(ch.axis)
+      if (t < -2 || t > ch.height + 2) continue
+      const perp = rel.clone().addScaledVector(ch.axis, -t)
+      if (perp.length() < ch.radius + 1.5) return true
+    }
+    return false
+  }
   for (let i = 0; i < graph.uniqueCount; i++) {
     if (curvature[i] <= creaseThreshold) continue
     const x = graph.positions[i * 3], y = graph.positions[i * 3 + 1], z = graph.positions[i * 3 + 2]
+    vert.set(x, y, z)
+    if (nearChannel(vert)) continue
     const key = keyOf(x, y, z)
     let arr = grid.get(key)
     if (!arr) { arr = []; grid.set(key, arr) }
     arr.push(i)
   }
 
-  const vert = new THREE.Vector3()
-  const rel = new THREE.Vector3()
   controls = controls.map(cp => {
     const cx = Math.floor(cp.x / cellSize), cy = Math.floor(cp.y / cellSize), cz = Math.floor(cp.z / cellSize)
     let best: THREE.Vector3 | null = null
@@ -448,14 +477,90 @@ export function proposeSplitCurve(input: ProposeCurveInput): SplitCurve | null {
     return best ?? cp
   })
 
-  // Riproiezione finale sulla superficie
+  // Riproiezione sulla superficie
   const bvh = geometry?.boundsTree
-  if (bvh) {
+  const reproject = (pts: THREE.Vector3[]) => {
+    if (!bvh) return
     const target = { point: new THREE.Vector3(), distance: 0, faceIndex: 0 }
-    for (const p of controls) {
+    for (const p of pts) {
       const hit = bvh.closestPointToPoint(p, target)
       if (hit) p.copy(hit.point)
     }
+  }
+  reproject(controls)
+
+  // Enforcement clearance dai camini: se un punto entra nel vuoto del canale
+  // o rasenta la parete (succede coi posteriori inclinati), spingilo
+  // radialmente verso l'esterno e riproietta sulla superficie
+  const proposalClearance = 0.9
+  for (let iter = 0; iter < 3; iter++) {
+    let moved = false
+    for (const p of controls) {
+      for (const ch of channels) {
+        rel.subVectors(p, ch.bottom)
+        const t = rel.dot(ch.axis)
+        if (t < -1 || t > ch.height + 1) continue
+        const perp = rel.clone().addScaledVector(ch.axis, -t)
+        const perpLen = perp.length()
+        if (perpLen - ch.radius >= proposalClearance) continue
+        // Direzione radiale di fuga (fallback se il punto è sull'asse)
+        const dir = perpLen > 1e-6
+          ? perp.multiplyScalar(1 / perpLen)
+          : new THREE.Vector3().crossVectors(ch.axis, axis).normalize()
+        p.copy(ch.bottom)
+          .addScaledVector(ch.axis, t)
+          .addScaledVector(dir, ch.radius + proposalClearance + 0.3)
+        moved = true
+      }
+    }
+    if (!moved) break
+    reproject(controls)
+  }
+
+  // La Catmull densificata può "tagliare l'angolo" rientrando verso il canale
+  // anche con punti di controllo liberi: verifica sui campioni densificati e
+  // spingi più forte il punto di controllo più vicino alla violazione
+  for (let iter = 0; iter < 5; iter++) {
+    const densified = densifySplitCurve({ controlPoints: controls, closed: true }, geometry ?? null)
+    let worst: { sample: THREE.Vector3; channel: ScrewChannel } | null = null
+    let worstDist = 0.45 // margine sopra la clearance di validazione (0.3)
+    for (const sample of densified) {
+      for (const ch of channels) {
+        rel.subVectors(sample, ch.bottom)
+        const t = rel.dot(ch.axis)
+        if (t < -1 || t > ch.height + 1) continue
+        const perp = rel.clone().addScaledVector(ch.axis, -t)
+        const signed = perp.length() - ch.radius
+        if (signed < worstDist) {
+          worstDist = signed
+          worst = { sample: sample.clone(), channel: ch }
+        }
+      }
+    }
+    if (!worst) break
+
+    // Punto di controllo più vicino alla violazione → spinto radialmente fuori
+    let nearestIdx = 0
+    let nearestD = Infinity
+    for (let i = 0; i < controls.length; i++) {
+      const d = controls[i].distanceToSquared(worst.sample)
+      if (d < nearestD) {
+        nearestD = d
+        nearestIdx = i
+      }
+    }
+    const cp = controls[nearestIdx]
+    const ch = worst.channel
+    rel.subVectors(cp, ch.bottom)
+    const t = rel.dot(ch.axis)
+    const perp = rel.clone().addScaledVector(ch.axis, -t)
+    const dir = perp.length() > 1e-6
+      ? perp.normalize()
+      : new THREE.Vector3().crossVectors(ch.axis, axis).normalize()
+    cp.copy(ch.bottom)
+      .addScaledVector(ch.axis, THREE.MathUtils.clamp(t, 0, ch.height))
+      .addScaledVector(dir, ch.radius + 0.7 + iter * 0.3)
+    reproject(controls)
   }
 
   return { controlPoints: controls, closed: true }

@@ -315,10 +315,20 @@ export function ViewerSection({
                   </Button>
                   {curveTool.curve.closed && (
                     <span
-                      className={`text-xs px-2 py-0.5 rounded whitespace-nowrap ${curveTool.validation.valid ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}
-                      title={curveTool.validation.errors.join(' · ')}
+                      className={`text-xs px-2 py-0.5 rounded whitespace-nowrap ${
+                        !curveTool.validation.valid
+                          ? 'bg-red-500/20 text-red-400'
+                          : curveTool.validation.warnings.length > 0
+                            ? 'bg-amber-500/20 text-amber-400'
+                            : 'bg-green-500/20 text-green-400'
+                      }`}
+                      title={[...curveTool.validation.errors, ...curveTool.validation.warnings].join(' · ')}
                     >
-                      {curveTool.validation.valid ? '✓ valida' : '✗ ' + curveTool.validation.errors[0]}
+                      {!curveTool.validation.valid
+                        ? '✗ ' + curveTool.validation.errors[0]
+                        : curveTool.validation.warnings.length > 0
+                          ? '⚠ ' + curveTool.validation.warnings[0]
+                          : '✓ valida'}
                     </span>
                   )}
                   {curveTool.curve.closed && curveTool.validation.valid && (

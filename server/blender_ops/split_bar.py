@@ -32,7 +32,8 @@ from server.blender_ops.common import (  # noqa: E402
     load_and_validate_stl,
     make_chimney,
     offset_mesh,
-    sweep_along_direction,
+    shadow_volume_heightfield,
+    simplify_bounded,
 )
 from server import checks  # noqa: E402
 
@@ -141,34 +142,54 @@ def run_pipeline(job: dict) -> dict:
         "thickness": thickness,
     }
 
-    # --- S6: dilatazione gap cemento ---------------------------------------
+    # --- S6: strumento cavità = barra dilatata del gap cemento --------------
+    # Su mesh reali (300-400k facce) lo sweep S7 esploderebbe: lo STRUMENTO
+    # viene decimato (mai le parti esportate) e il gap aumentato del margine
+    # d'errore della decimazione — la cavità può solo allargarsi leggermente,
+    # mai stringersi (sicuro per il fit passivo).
     t0 = time.time()
     gap = params["cement_gap_mm"]
-    dilated = offset_mesh(bar, gap)
-    # L'unione con la barra sana le pieghe dell'offset nelle concavità
-    bar_gap = boolean_op(dilated, bar, "union", "S6")
+    bar_tool = bar
+    decimation_margin = 0.0
+    if len(bar.faces) > 60000:
+        simplified = simplify_bounded(bar, epsilon=0.02)
+        if simplified is not None:
+            bar_tool = simplified
+            decimation_margin = 0.03  # copre l'errore 0.02mm della semplificazione
+        else:
+            report["warnings"].append(
+                "Semplificazione strumento cavità fallita: uso mesh piena (più lento)"
+            )
+
+    dilated = offset_mesh(bar_tool, gap + decimation_margin)
+    # L'unione con lo strumento sana le pieghe dell'offset nelle concavità
+    bar_gap = boolean_op(dilated, bar_tool, "union", "S6")
     assert bar_gap is not None
     report["stages"]["S6"] = {
         "seconds": round(time.time() - t0, 2),
         "bar_gap": mesh_stats(bar_gap),
+        "tool_faces": int(len(bar_tool.faces)),
+        "decimation_margin_mm": decimation_margin,
     }
 
     # --- S7: volume ombra lungo −asse (direzione di calzata) ----------------
     # La sovrastruttura scende lungo −asse per calzare sulla barra: un suo
     # punto p collide se p + s·asse ∈ B per qualche s>0, cioè se p appartiene
-    # allo sweep della barra dilatata verso il BASSO. Questo scava in un colpo
-    # solo: impronta con gap, blockout dei sottosquadri e clearance del
-    # percorso di inserzione (i camini 'through' arrivano all'occlusale e la
-    # loro ombra apre i fori di accesso).
+    # allo sweep della barra dilatata verso il BASSO — la regione sotto
+    # l'inviluppo superiore dello strumento. Costruito come heightfield
+    # (griglia ⊥ asse = passo blockout): impronta con gap, blockout dei
+    # sottosquadri, clearance di inserzione e fori di accesso (i camini
+    # 'through' arrivano all'occlusale) in un'unica operazione lineare.
     t0 = time.time()
     t_mesh_min = float(np.min(original.vertices @ axis))
-    t_bar_max = float(np.max(bar_gap.vertices @ axis))
-    sweep_length = (t_bar_max - t_mesh_min) + 2.0
-    shadow = sweep_along_direction(bar_gap, -axis, sweep_length, params["blockout_step_mm"])
+    shadow = shadow_volume_heightfield(
+        bar_gap, axis,
+        cell=params["blockout_step_mm"],
+        floor_t=t_mesh_min - 1.0,
+    )
     report["stages"]["S7"] = {
         "seconds": round(time.time() - t0, 2),
         "shadow": mesh_stats(shadow),
-        "sweep_length_mm": round(sweep_length, 1),
     }
 
     # --- S8: sovrastruttura S = originale − ombra ---------------------------

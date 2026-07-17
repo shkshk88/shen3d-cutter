@@ -268,7 +268,7 @@ export function clusterPoints(
 // Fit dei rim (bordi circolari dei camini)
 // ---------------------------------------------------------------------------
 
-function fitRimFromCluster(
+export function fitRimFromCluster(
   graph: MeshGraph,
   cluster: number[],
   opts: ChannelDetectionOptions
@@ -350,7 +350,7 @@ function fitRimFromCluster(
 // Raffinamento cilindro dalla parete del tubo
 // ---------------------------------------------------------------------------
 
-interface CylinderFit {
+export interface CylinderFit {
   center: THREE.Vector3
   axis: THREE.Vector3
   radius: number
@@ -362,47 +362,64 @@ interface CylinderFit {
 
 /**
  * Raffina un cilindro raccogliendo i vertici della parete del tubo.
- * L'asse è l'autovettore con autovalore minimo della covarianza delle normali:
- * le normali di una parete cilindrica giacciono nel piano ortogonale all'asse.
+ *
+ * Robustezze per canali reali (validate su ponti All-on-X):
+ * - filtro per normale ~⊥ asse: esclude le superfici occlusali piatte attorno
+ *   al foro d'accesso che altrimenti dominano la covarianza e ribaltano l'asse
+ * - finestra assiale espansa a ogni iterazione: la coppia di rim iniziale può
+ *   coprire solo un tratto (sede+tubo), il canale reale è più lungo
+ * - raggio = banda dominante dell'istogramma delle distanze radiali: i canali
+ *   implantari hanno gradini (counterbore) e taper, la media pura è sbagliata
  */
-function refineCylinder(
+export function refineCylinder(
   graph: MeshGraph,
   initialAxis: THREE.Vector3,
   initialBottom: THREE.Vector3,
   initialTop: THREE.Vector3,
-  initialRadius: number,
-  iterations = 2
+  tubeRadius: number,
+  iterations = 3
 ): CylinderFit | null {
   const { positions, normals, uniqueCount } = graph
   let axis = initialAxis.clone().normalize()
-  let bottom = initialBottom.clone()
-  let radius = initialRadius
-  let height = initialTop.distanceTo(initialBottom)
+  let anchor = initialBottom.clone().add(initialTop).multiplyScalar(0.5)
+  const initialHalf = Math.max(initialTop.distanceTo(initialBottom) / 2, 0.5)
+  let tMinW = -initialHalf
+  let tMaxW = +initialHalf
+  let radius = tubeRadius
 
   const p = new THREE.Vector3()
   const rel = new THREE.Vector3()
   const perp = new THREE.Vector3()
+  const nrm = new THREE.Vector3()
 
   let result: CylinderFit | null = null
 
   for (let iter = 0; iter < iterations; iter++) {
-    const wall: number[] = []
-    const radialTol = 0.4
-    const axialMargin = 0.5
+    // Finestra assiale espansa simmetricamente: il canale può estendersi
+    // oltre i rim iniziali (la coppia sede+tubo copre solo un tratto)
+    const axialLo = tMinW - 6.0
+    const axialHi = tMaxW + 6.0
+    const radialTol = 0.35
 
+    const wall: number[] = []
     for (let i = 0; i < uniqueCount; i++) {
+      nrm.set(normals[i * 3], normals[i * 3 + 1], normals[i * 3 + 2])
+      // Solo pareti ~cilindriche: esclude superfici occlusali piatte e cap
+      if (Math.abs(nrm.dot(axis)) > 0.45) continue
       p.set(positions[i * 3], positions[i * 3 + 1], positions[i * 3 + 2])
-      rel.subVectors(p, bottom)
+      rel.subVectors(p, anchor)
       const t = rel.dot(axis)
-      if (t < -axialMargin || t > height + axialMargin) continue
+      if (t < axialLo || t > axialHi) continue
       perp.copy(rel).addScaledVector(axis, -t)
-      const d = perp.length()
-      if (Math.abs(d - radius) <= radialTol) wall.push(i)
+      // Solo la banda del tubo: il raggio è noto dal rim, NON va ristimato
+      // dall'istogramma (counterbore/anatomia lo rendono instabile)
+      if (Math.abs(perp.length() - radius) > radialTol) continue
+      wall.push(i)
     }
 
     if (wall.length < 40) return result
 
-    // Covarianza delle normali dei vertici della parete
+    // Covarianza delle normali della parete → asse = autovettore minimo
     let nxx = 0, nxy = 0, nxz = 0, nyy = 0, nyz = 0, nzz = 0
     for (const i of wall) {
       const nx = normals[i * 3], ny = normals[i * 3 + 1], nz = normals[i * 3 + 2]
@@ -414,7 +431,7 @@ function refineCylinder(
     if (newAxis.dot(axis) < 0) newAxis.negate()
     axis = newAxis
 
-    // Ricalcola centro assiale, raggio e quota top/bottom
+    // Centro: media delle proiezioni ⊥ asse (per un tubo completo È l'asse)
     const centroid = new THREE.Vector3()
     for (const i of wall) {
       centroid.x += positions[i * 3]
@@ -423,34 +440,33 @@ function refineCylinder(
     }
     centroid.divideScalar(wall.length)
 
-    let tMin = Infinity, tMax = -Infinity
-    let radiusSum = 0
-    // Centro radiale: media dei punti proiettati sul piano ⊥ asse,
-    // spostata verso l'interno — per un tubo completo la media È il centro
     const planar = new THREE.Vector3()
     for (const i of wall) {
       p.set(positions[i * 3], positions[i * 3 + 1], positions[i * 3 + 2])
       rel.subVectors(p, centroid)
       const t = rel.dot(axis)
-      if (t < tMin) tMin = t
-      if (t > tMax) tMax = t
       perp.copy(rel).addScaledVector(axis, -t)
       planar.add(perp)
     }
     planar.divideScalar(wall.length)
     const axisPoint = centroid.clone().add(planar)
 
+    // Raggio ed estensione della banda del tubo
+    let tMin = Infinity, tMax = -Infinity
+    let radiusSum = 0
     for (const i of wall) {
       p.set(positions[i * 3], positions[i * 3 + 1], positions[i * 3 + 2])
       rel.subVectors(p, axisPoint)
       const t = rel.dot(axis)
+      if (t < tMin) tMin = t
+      if (t > tMax) tMax = t
       perp.copy(rel).addScaledVector(axis, -t)
       radiusSum += perp.length()
     }
 
     radius = radiusSum / wall.length
-    height = tMax - tMin
-    bottom = axisPoint.clone().addScaledVector(axis, tMin)
+    const height = tMax - tMin
+    const bottom = axisPoint.clone().addScaledVector(axis, tMin)
     const top = axisPoint.clone().addScaledVector(axis, tMax)
 
     result = {
@@ -462,6 +478,10 @@ function refineCylinder(
       height,
       inlierCount: wall.length,
     }
+
+    anchor = result.center.clone()
+    tMinW = -height / 2
+    tMaxW = +height / 2
   }
 
   return result
@@ -472,35 +492,41 @@ function refineCylinder(
 // ---------------------------------------------------------------------------
 
 /**
- * Dal centro del canale lancia raggi radiali ⊥ asse: in un tubo vero la prima
- * superficie colpita è la parete interna a distanza ≈ raggio.
- * Ritorna la frazione di raggi coerenti (0..1).
+ * Lancia raggi radiali ⊥ asse a 3 quote (25/50/75% dell'altezza): dentro un
+ * tubo vero la prima superficie colpita è vicina (≈ raggio, con tolleranza per
+ * taper e counterbore). Ritorna la frazione di raggi coerenti (0..1).
  */
-function validateChannelRadially(
+export function validateChannelRadially(
   geometry: THREE.BufferGeometry,
   channel: CylinderFit
 ): number {
   const bvh = geometry.boundsTree
   if (!bvh) return 0.5
 
-  const { axis, center, radius } = channel
+  const { axis, bottom, radius, height } = channel
   const ref = Math.abs(axis.x) < 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0)
   const u = new THREE.Vector3().crossVectors(axis, ref).normalize()
   const v = new THREE.Vector3().crossVectors(axis, u).normalize()
 
   const ray = new THREE.Ray()
-  let good = 0
   const nRays = 8
-  for (let k = 0; k < nRays; k++) {
-    const angle = (k / nRays) * Math.PI * 2
-    const dir = u.clone().multiplyScalar(Math.cos(angle))
-      .add(v.clone().multiplyScalar(Math.sin(angle)))
-    ray.origin.copy(center)
-    ray.direction.copy(dir)
-    const hit = bvh.raycastFirst(ray, THREE.DoubleSide)
-    if (hit && Math.abs(hit.distance - radius) < 0.35) good++
+  let good = 0
+  let total = 0
+  for (const frac of [0.25, 0.5, 0.75]) {
+    const origin = bottom.clone().addScaledVector(axis, height * frac)
+    for (let k = 0; k < nRays; k++) {
+      const angle = (k / nRays) * Math.PI * 2
+      const dir = u.clone().multiplyScalar(Math.cos(angle))
+        .add(v.clone().multiplyScalar(Math.sin(angle)))
+      ray.origin.copy(origin)
+      ray.direction.copy(dir)
+      const hit = bvh.raycastFirst(ray, THREE.DoubleSide)
+      total++
+      // dentro un tubo: prima parete vicina (counterbore/taper tollerati)
+      if (hit && hit.distance > radius * 0.3 && hit.distance < radius * 2.5 + 0.5) good++
+    }
   }
-  return good / nRays
+  return total > 0 ? good / total : 0
 }
 
 // ---------------------------------------------------------------------------
@@ -534,38 +560,84 @@ export function detectScrewChannels(
     if (rim) rims.push(rim)
   }
 
-  // 4. Accoppiamento rim → canali iniziali
-  interface Pair { i: number; j: number; score: number }
-  const pairs: Pair[] = []
+  // 4. Raggruppamento dei rim per coassialità (union-find).
+  //    NIENTE vincolo di similarità dei raggi: i canali implantari reali hanno
+  //    gradini (counterbore della sede + tubo + accesso occlusale) — lo stesso
+  //    sito produce 2-3 rim coassiali con raggi diversi.
+  const parent = rims.map((_, i) => i)
+  const find = (x: number): number => {
+    while (parent[x] !== x) {
+      parent[x] = parent[parent[x]]
+      x = parent[x]
+    }
+    return x
+  }
+
   for (let i = 0; i < rims.length; i++) {
     for (let j = i + 1; j < rims.length; j++) {
       const a = rims[i], b = rims[j]
       const between = new THREE.Vector3().subVectors(b.center, a.center)
       const dist = between.length()
-      if (dist < opts.minChannelHeight || dist > opts.maxChannelHeight) continue
+      // Separazione assiale minima 1.5mm: sede e tubo sono vicini
+      if (dist < 1.5 || dist > opts.maxChannelHeight) continue
       const dir = between.clone().normalize()
-      const alignA = Math.abs(dir.dot(a.normal))
-      const alignB = Math.abs(dir.dot(b.normal))
-      if (alignA < 0.7 || alignB < 0.7) continue
-      if (Math.abs(a.radius - b.radius) > 1.2) continue
-      const score = (alignA + alignB) / (1 + a.residual + b.residual)
-      pairs.push({ i, j, score })
+      // Coassiali: la retta tra i centri è ~parallela a entrambe le normali
+      if (Math.abs(dir.dot(a.normal)) < 0.75) continue
+      if (Math.abs(dir.dot(b.normal)) < 0.75) continue
+      parent[find(i)] = find(j)
     }
   }
-  pairs.sort((a, b) => b.score - a.score)
 
-  const usedRims = new Set<number>()
+  const groups = new Map<number, number[]>()
+  for (let i = 0; i < rims.length; i++) {
+    const root = find(i)
+    let arr = groups.get(root)
+    if (!arr) {
+      arr = []
+      groups.set(root, arr)
+    }
+    arr.push(i)
+  }
+
   const channels: ScrewChannel[] = []
 
-  for (const pair of pairs) {
-    if (usedRims.has(pair.i) || usedRims.has(pair.j)) continue
-    const a = rims[pair.i], b = rims[pair.j]
+  for (const group of groups.values()) {
+    // Raggio del tubo = rim più piccolo del gruppo (sede/counterbore sono
+    // più larghi; il tubo è il foro della vite)
+    const tubeRadius = Math.min(...group.map(gi => rims[gi].radius))
 
-    const axis = new THREE.Vector3().subVectors(b.center, a.center).normalize()
-    const radius = (a.radius + b.radius) / 2
+    let initialAxis: THREE.Vector3
+    let initialBottom: THREE.Vector3
+    let initialTop: THREE.Vector3
 
-    // 5. Raffinamento dalla parete del tubo
-    const refined = refineCylinder(graph, axis, a.center, b.center, radius)
+    if (group.length >= 2) {
+      // Asse iniziale = direzione tra i due rim più distanti del gruppo
+      let bestI = group[0], bestJ = group[1], bestDist = 0
+      for (let gi = 0; gi < group.length; gi++) {
+        for (let gj = gi + 1; gj < group.length; gj++) {
+          const d = rims[group[gi]].center.distanceTo(rims[group[gj]].center)
+          if (d > bestDist) {
+            bestDist = d
+            bestI = group[gi]
+            bestJ = group[gj]
+          }
+        }
+      }
+      initialAxis = new THREE.Vector3().subVectors(rims[bestJ].center, rims[bestI].center).normalize()
+      initialBottom = rims[bestI].center
+      initialTop = rims[bestJ].center
+    } else {
+      // Rim singolo: accettato solo se in range tubo (a volte il rim della
+      // sede non fitta perché fuso con l'anatomia) — asse = normale del rim
+      const rim = rims[group[0]]
+      if (rim.radius > 1.6) continue
+      initialAxis = rim.normal.clone()
+      initialBottom = rim.center.clone().addScaledVector(rim.normal, -2)
+      initialTop = rim.center.clone().addScaledVector(rim.normal, 2)
+    }
+
+    // 5. Raffinamento seguendo la banda del tubo
+    const refined = refineCylinder(graph, initialAxis, initialBottom, initialTop, tubeRadius)
     if (!refined) continue
     if (refined.radius < opts.minRadius || refined.radius > opts.maxRadius) continue
     if (refined.height < opts.minChannelHeight) continue
@@ -573,9 +645,6 @@ export function detectScrewChannels(
     // 6. Validazione radiale
     const rayScore = validateChannelRadially(geometry, refined)
     if (rayScore < 0.5) continue
-
-    usedRims.add(pair.i)
-    usedRims.add(pair.j)
 
     channels.push({
       id: `channel-${channels.length}`,

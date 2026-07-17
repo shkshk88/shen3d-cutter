@@ -172,6 +172,30 @@ def union_all(meshes: list[trimesh.Trimesh], stage: str) -> trimesh.Trimesh:
     return result
 
 
+def simplify_bounded(mesh: trimesh.Trimesh, epsilon: float) -> trimesh.Trimesh | None:
+    """Semplifica con errore geometrico limitato a `epsilon` mm e output
+    garantito manifold (Manifold.simplify). Ritorna None se fallisce."""
+    try:
+        import numpy as _np
+        from manifold3d import Manifold, Mesh
+
+        man = Manifold(Mesh(
+            vert_properties=_np.ascontiguousarray(mesh.vertices, dtype=_np.float32),
+            tri_verts=_np.ascontiguousarray(mesh.faces, dtype=_np.uint32),
+        ))
+        out = man.simplify(epsilon).to_mesh()
+        result = trimesh.Trimesh(
+            vertices=_np.asarray(out.vert_properties, dtype=_np.float64),
+            faces=_np.asarray(out.tri_verts, dtype=_np.int64),
+            process=True,
+        )
+        if not result.is_watertight or len(result.faces) == 0:
+            return None
+        return result
+    except Exception:  # noqa: BLE001 — semplificazione best-effort
+        return None
+
+
 # ---------------------------------------------------------------------------
 # Camini, offset e sweep (S4–S7)
 # ---------------------------------------------------------------------------
@@ -243,8 +267,10 @@ def sweep_along_direction(
     step: float,
     stage: str = "S7",
 ) -> trimesh.Trimesh:
-    """S7 — Volume ombra: unione di copie traslate lungo `direction` con
-    raddoppio (Minkowski discreto con un segmento). ~log2(L/δ) unioni esatte.
+    """Volume ombra per unioni raddoppiate (Minkowski discreto con segmento).
+
+    Esatto ma costoso su mesh dense (il numero di copie è L/δ): usato solo
+    come fallback — il percorso primario è `shadow_volume_heightfield`.
     """
     d = np.asarray(direction, dtype=np.float64)
     d = d / np.linalg.norm(d)
@@ -262,6 +288,139 @@ def sweep_along_direction(
         shift = covered + step
 
     return swept
+
+
+def shadow_volume_heightfield(
+    tool: trimesh.Trimesh,
+    direction: np.ndarray,
+    cell: float,
+    floor_t: float,
+    samples: int = 400_000,
+) -> trimesh.Trimesh:
+    """S7 — Volume ombra dello strumento lungo −direction come heightfield.
+
+    Lo sweep verso il basso di un solido = regione sotto il suo inviluppo
+    superiore lungo `direction`: si rasterizza l'inviluppo su una griglia
+    ⊥ direction (z-buffer max dei campioni di superficie) e si costruisce il
+    solido "terreno" (top = inviluppo, pareti perimetrali, fondo a floor_t).
+
+    Conservativo per costruzione: dilatazione morfologica 3×3 dell'inviluppo
+    (la cavità può solo allargarsi di ≤1 cella — clearance extra nelle zone di
+    blockout, mai interferenza). Costo lineare, nessuna unione booleana.
+    """
+    d = np.asarray(direction, dtype=np.float64)
+    d = d / np.linalg.norm(d)
+    ref = np.array([1.0, 0.0, 0.0]) if abs(d[0]) < 0.9 else np.array([0.0, 1.0, 0.0])
+    u = np.cross(d, ref)
+    u /= np.linalg.norm(u)
+    v = np.cross(d, u)
+
+    surface_pts, _ = trimesh.sample.sample_surface(tool, samples)
+    pts = np.vstack([tool.vertices, surface_pts])
+    pu = pts @ u
+    pv = pts @ v
+    pt = pts @ d
+
+    u0 = pu.min() - cell
+    v0 = pv.min() - cell
+    nu = int(np.ceil((pu.max() - u0) / cell)) + 2
+    nv = int(np.ceil((pv.max() - v0) / cell)) + 2
+
+    iu = np.clip(((pu - u0) / cell).astype(int), 0, nu - 1)
+    iv = np.clip(((pv - v0) / cell).astype(int), 0, nv - 1)
+
+    height = np.full((nu, nv), -np.inf)
+    np.maximum.at(height, (iu, iv), pt)
+
+    # Dilatazione morfologica 3×3: copre i buchi di campionamento e rende
+    # l'inviluppo conservativo (≤1 cella verso l'esterno)
+    padded = np.full((nu + 2, nv + 2), -np.inf)
+    padded[1:-1, 1:-1] = height
+    dilated = height.copy()
+    for du in (0, 1, 2):
+        for dv in (0, 1, 2):
+            np.maximum(dilated, padded[du:du + nu, dv:dv + nv], out=dilated)
+    height = dilated
+    mask = height > -np.inf
+
+    # De-scacchierizzazione: celle connesse solo in diagonale creano vertici
+    # non-manifold nel solido terreno — riempi l'angolo mancante
+    for _ in range(8):
+        a = mask[:-1, :-1] & mask[1:, 1:] & ~mask[1:, :-1] & ~mask[:-1, 1:]
+        b = mask[1:, :-1] & mask[:-1, 1:] & ~mask[:-1, :-1] & ~mask[1:, 1:]
+        if not (a.any() or b.any()):
+            break
+        fill_h = np.maximum(height[:-1, :-1], height[1:, 1:])
+        idx = np.argwhere(a)
+        for ci, cj in idx:
+            height[ci + 1, cj] = max(height[ci + 1, cj], fill_h[ci, cj])
+            mask[ci + 1, cj] = True
+        fill_h2 = np.maximum(height[1:, :-1], height[:-1, 1:])
+        idx = np.argwhere(b)
+        for ci, cj in idx:
+            height[ci, cj] = max(height[ci, cj], fill_h2[ci, cj])
+            mask[ci, cj] = True
+
+    # Quote degli angoli (nu+1 × nv+1) = max delle celle adiacenti
+    hpad = np.full((nu + 2, nv + 2), -np.inf)
+    hpad[1:-1, 1:-1] = height
+    corner = np.maximum(
+        np.maximum(hpad[:-1, :-1], hpad[1:, :-1]),
+        np.maximum(hpad[:-1, 1:], hpad[1:, 1:]),
+    )  # (nu+1, nv+1)
+
+    # Indici vertici: per ogni angolo usato, un vertice top e uno floor
+    corner_used = corner > -np.inf
+    corner_idx = np.full(corner.shape, -1, dtype=np.int64)
+    used_positions = np.argwhere(corner_used)
+    corner_idx[corner_used] = np.arange(len(used_positions))
+    n_corners = len(used_positions)
+
+    cu = u0 + used_positions[:, 0] * cell
+    cv = v0 + used_positions[:, 1] * cell
+    ch = corner[corner_used]
+    top_vertices = cu[:, None] * u[None, :] + cv[:, None] * v[None, :] + ch[:, None] * d[None, :]
+    floor_vertices = cu[:, None] * u[None, :] + cv[:, None] * v[None, :] + floor_t * d[None, :]
+    vertices = np.vstack([top_vertices, floor_vertices])
+
+    faces: list[list[int]] = []
+    cell_positions = np.argwhere(mask)
+    for ci, cj in cell_positions:
+        c00 = corner_idx[ci, cj]
+        c10 = corner_idx[ci + 1, cj]
+        c01 = corner_idx[ci, cj + 1]
+        c11 = corner_idx[ci + 1, cj + 1]
+        # top (normale ~ +d)
+        faces.append([c00, c10, c11])
+        faces.append([c00, c11, c01])
+        # fondo (normale ~ −d)
+        f00, f10, f01, f11 = c00 + n_corners, c10 + n_corners, c01 + n_corners, c11 + n_corners
+        faces.append([f00, f11, f10])
+        faces.append([f00, f01, f11])
+        # pareti sui bordi cella piena/vuota
+        if ci == 0 or not mask[ci - 1, cj]:
+            faces.append([c00, c01, f01])
+            faces.append([c00, f01, f00])
+        if ci == nu - 1 or not mask[ci + 1, cj]:
+            faces.append([c10, f10, f11])
+            faces.append([c10, f11, c11])
+        if cj == 0 or not mask[ci, cj - 1]:
+            faces.append([c00, f00, f10])
+            faces.append([c00, f10, c10])
+        if cj == nv - 1 or not mask[ci, cj + 1]:
+            faces.append([c01, c11, f11])
+            faces.append([c01, f11, f01])
+
+    solid = trimesh.Trimesh(vertices=vertices, faces=np.array(faces, dtype=np.int64), process=True)
+    solid.merge_vertices()
+    trimesh.repair.fix_normals(solid)
+    if not solid.is_watertight:
+        raise PipelineError("S7", "Volume ombra heightfield non watertight")
+    if solid.volume < 0:
+        solid.invert()
+
+    simplified = simplify_bounded(solid, epsilon=0.02)
+    return simplified if simplified is not None else solid
 
 
 # ---------------------------------------------------------------------------

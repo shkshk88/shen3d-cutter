@@ -18,7 +18,15 @@
       "Bash(mkdir -p /home/user/shen3d-cutter/test-assets)",
       "Bash(git add *)",
       "Bash(git commit -q -m 'chore: aggiorna permessi locali sessione \\(.claude/settings.local.json\\) *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(git fetch *)",
+      "Bash(git ls-tree *)",
+      "Bash(git merge origin/main -m 'merge: STL reali All-on-4 da main \\(stl-samples/full-arch-bridges\\) *)",
+      "Bash(python3 -)",
+      "Bash(printf 'test-assets/\\\\n')",
+      "Bash(mkdir -p scripts test-assets)",
+      "Bash(npx vitest *)",
+      "Bash(grep -v \"^$\")"
     ],
     "deny": [
       "Bash(rm -rf /)",
