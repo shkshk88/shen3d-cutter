@@ -65,6 +65,8 @@ export function ViewerSection({
   const [barJobRunning, setBarJobRunning] = useState(false)
   const [barDialogOpen, setBarDialogOpen] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  // Cache dell'upload: rigenerare con parametri diversi non richiede re-upload
+  const lastUploadRef = useRef<{ file: File; stlPath: string } | null>(null)
 
   const annotationTool = useAnnotationTool()
   const curveTool = useSplitCurveTool({
@@ -165,9 +167,16 @@ export function ViewerSection({
     setBarJobRunning(true)
     setBarJob(null)
     try {
-      const upload = await uploadStlToServer(stlFile)
+      let stlPath: string
+      if (lastUploadRef.current && lastUploadRef.current.file === stlFile) {
+        stlPath = lastUploadRef.current.stlPath
+      } else {
+        const upload = await uploadStlToServer(stlFile)
+        stlPath = upload.stl_path
+        lastUploadRef.current = { file: stlFile, stlPath }
+      }
       const jobId = await startSplitBarJob({
-        stlPath: upload.stl_path,
+        stlPath,
         curvePoints: curveTool.densified,
         insertionAxis: analysisResult.insertionAxis,
         channels: analysisResult.channels,
@@ -422,6 +431,8 @@ export function ViewerSection({
           onOpenChange={setBarDialogOpen}
           job={barJob}
           insertionAxis={insertionAxisTuple}
+          onRegenerate={handleGenerateSplit}
+          regenerating={barJobRunning}
         />
       </div>
     </div>

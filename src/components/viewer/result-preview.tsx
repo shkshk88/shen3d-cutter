@@ -35,14 +35,18 @@ interface ResultPreviewProps {
   superFile: string
   /** Asse di inserzione (per l'esplosione della vista) */
   axis: [number, number, number]
+  /** Punti della barra sotto lo spessore minimo (overlay rosso) */
+  thinSpots?: [number, number, number][]
 }
 
 /**
  * Preview 3D del risultato: barra (indigo) + sovrastruttura (semi-trasparente)
- * con slider di esplosione lungo l'asse di inserzione.
+ * con slider di esplosione lungo l'asse di inserzione e overlay dei punti
+ * sotto spessore minimo.
  */
-export function ResultPreview({ barFile, superFile, axis }: ResultPreviewProps) {
+export function ResultPreview({ barFile, superFile, axis, thinSpots }: ResultPreviewProps) {
   const [explode, setExplode] = useState(0)
+  const [showThinSpots, setShowThinSpots] = useState(true)
 
   const supOffset = useMemo(() => {
     const d = new THREE.Vector3(...axis)
@@ -73,6 +77,12 @@ export function ResultPreview({ barFile, superFile, axis }: ResultPreviewProps) 
               />
             </Bounds>
           </Suspense>
+          {showThinSpots && thinSpots?.map((p, i) => (
+            <mesh key={i} position={p}>
+              <sphereGeometry args={[0.35, 8, 8]} />
+              <meshBasicMaterial color="#ef4444" transparent opacity={0.85} depthTest={false} />
+            </mesh>
+          ))}
           <OrbitControls makeDefault enableDamping dampingFactor={0.1} />
         </Canvas>
       </div>
@@ -86,6 +96,16 @@ export function ResultPreview({ barFile, superFile, axis }: ResultPreviewProps) 
           onValueChange={(v) => setExplode(Array.isArray(v) ? v[0] : (v as number))}
         />
         <span className="text-xs w-12 text-right">{explode.toFixed(1)}mm</span>
+        {thinSpots && thinSpots.length > 0 && (
+          <button
+            type="button"
+            className={`text-xs px-2 py-0.5 rounded whitespace-nowrap border ${showThinSpots ? 'bg-red-500/20 text-red-400 border-red-500/50' : 'text-muted-foreground border-border'}`}
+            onClick={() => setShowThinSpots(!showThinSpots)}
+            title="Punti della barra sotto lo spessore minimo"
+          >
+            ⚠ sottile ({thinSpots.length})
+          </button>
+        )}
       </div>
     </div>
   )

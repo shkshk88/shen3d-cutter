@@ -4,8 +4,10 @@ import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { downloadAnnotations } from '@/lib/export-annotations'
 import { MeshAnalysisResult } from '@/lib/mesh-analysis'
+import { AxisAdjustment } from '@/lib/screw-channels'
 import { BarParams } from '@/lib/bar-client'
 import { ParamsPanel } from './params-panel'
+import { InsertionAxisControls } from './insertion-axis-controls'
 import * as THREE from 'three'
 
 interface SidebarProps {
@@ -17,11 +19,14 @@ interface SidebarProps {
   fileName?: string
   barParams: BarParams
   onBarParamsChange: (params: BarParams) => void
+  axisAdjustment?: AxisAdjustment
+  onAxisAdjustmentChange?: (adjustment: AxisAdjustment) => void
 }
 
 export function Sidebar({
   analysisResult, selectedImplant, onImplantSelect, onChannelRemove,
   annotationCount = 0, barParams, onBarParamsChange,
+  axisAdjustment, onAxisAdjustmentChange,
 }: SidebarProps) {
   const size = analysisResult?.boundingBox
     ? new THREE.Vector3()
@@ -78,6 +83,14 @@ export function Sidebar({
               <p className="text-[10px] text-muted-foreground">
                 Asse inserzione: ({analysisResult.insertionAxis.x.toFixed(2)}, {analysisResult.insertionAxis.y.toFixed(2)}, {analysisResult.insertionAxis.z.toFixed(2)})
               </p>
+            )}
+            {analysisResult.channels.length > 0 && axisAdjustment && onAxisAdjustmentChange && (
+              <div className="pt-2">
+                <InsertionAxisControls
+                  adjustment={axisAdjustment}
+                  onChange={onAxisAdjustmentChange}
+                />
+              </div>
             )}
           </div>
         ) : (

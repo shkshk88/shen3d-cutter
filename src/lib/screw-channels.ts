@@ -632,6 +632,40 @@ export function computeInsertionAxis(channels: ScrewChannel[]): THREE.Vector3 | 
   return mean.normalize()
 }
 
+/** Regolazione manuale dell'asse di inserzione (gradi, rispetto all'asse medio) */
+export interface AxisAdjustment {
+  flipped: boolean
+  tiltU: number
+  tiltV: number
+}
+
+export const DEFAULT_AXIS_ADJUSTMENT: AxisAdjustment = { flipped: false, tiltU: 0, tiltV: 0 }
+
+/**
+ * Applica flip e due tilt ortogonali all'asse base. u/v sono una base
+ * stabile del piano ⊥ asse, così gli slider hanno un significato coerente.
+ */
+export function applyAxisAdjustment(base: THREE.Vector3, adj: AxisAdjustment): THREE.Vector3 {
+  const axis = base.clone().normalize()
+  if (adj.flipped) axis.negate()
+
+  const ref = Math.abs(axis.x) < 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0)
+  const u = new THREE.Vector3().crossVectors(axis, ref).normalize()
+  const v = new THREE.Vector3().crossVectors(axis, u).normalize()
+
+  if (adj.tiltU !== 0) {
+    axis.applyQuaternion(
+      new THREE.Quaternion().setFromAxisAngle(u, THREE.MathUtils.degToRad(adj.tiltU))
+    )
+  }
+  if (adj.tiltV !== 0) {
+    axis.applyQuaternion(
+      new THREE.Quaternion().setFromAxisAngle(v, THREE.MathUtils.degToRad(adj.tiltV))
+    )
+  }
+  return axis.normalize()
+}
+
 /**
  * Fit manuale: l'utente clicca un punto dentro/vicino a un camino non rilevato.
  * Si parte dai vertici vicini al click e si raffina il cilindro localmente.

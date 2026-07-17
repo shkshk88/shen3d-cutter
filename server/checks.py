@@ -85,8 +85,13 @@ def min_thickness_stats(
     mesh: trimesh.Trimesh,
     threshold: float,
     samples: int = 800,
+    max_thin_points: int = 200,
 ) -> dict:
-    """Spessore locale campionato via raggi interni (warning, non enforcement)."""
+    """Spessore locale campionato via raggi interni (warning, non enforcement).
+
+    Ritorna anche le coordinate dei campioni sotto soglia (`thin_points`,
+    max `max_thin_points`) per l'overlay heatmap nel frontend.
+    """
     points, face_idx = trimesh.sample.sample_surface(mesh, samples)
     normals = mesh.face_normals[face_idx]
     try:
@@ -95,13 +100,24 @@ def min_thickness_stats(
         )
     except Exception:  # noqa: BLE001 — metodo best-effort
         return {"thickness_ok": None, "error": "misura spessore non disponibile"}
-    thickness = thickness[np.isfinite(thickness)]
+
+    finite = np.isfinite(thickness)
+    thickness = thickness[finite]
+    points = points[finite]
     if len(thickness) == 0:
         return {"thickness_ok": None}
-    below = float(np.mean(thickness < threshold))
+
+    below_mask = thickness < threshold
+    below = float(np.mean(below_mask))
+    thin_points = points[below_mask]
+    if len(thin_points) > max_thin_points:
+        idx = np.linspace(0, len(thin_points) - 1, max_thin_points).astype(int)
+        thin_points = thin_points[idx]
+
     return {
         "thickness_min": float(np.min(thickness)),
         "thickness_median": float(np.median(thickness)),
         "below_threshold_ratio": below,
         "thickness_ok": bool(below < 0.05),
+        "thin_points": [[round(float(c), 3) for c in p] for p in thin_points],
     }

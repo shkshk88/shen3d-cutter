@@ -228,6 +228,7 @@ def run_pipeline(job: dict) -> dict:
         "gap": gap_report,
         "insertion": sweep_check,
         "channels_patent": patency,
+        "bar_thickness": thickness,
         "volume_conservation": bool(
             bar.volume + superstructure.volume <= vol_original * 1.001
         ),
