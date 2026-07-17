@@ -12,6 +12,8 @@ interface SplitCurveVisualProps {
   selectedIndex: number | null
   /** Geometria del modello (con boundsTree) per il drag incollato alla superficie */
   geometry: THREE.BufferGeometry | null
+  /** Asse di inserzione: per le curve libere il drag avviene sul piano di quota ⊥ asse */
+  insertionAxis?: THREE.Vector3 | null
   editable: boolean
   valid: boolean
   onSelectPoint: (index: number | null) => void
@@ -27,7 +29,7 @@ interface SplitCurveVisualProps {
  * superficie della mesh via BVH (il punto resta incollato al modello).
  */
 export function SplitCurveVisual({
-  curve, densified, selectedIndex, geometry, editable, valid,
+  curve, densified, selectedIndex, geometry, insertionAxis, editable, valid,
   onSelectPoint, onMovePoint, onBeginDrag, onInsertPoint, onDeletePoint,
 }: SplitCurveVisualProps) {
   const { camera, gl, controls } = useThree()
@@ -55,6 +57,20 @@ export function SplitCurveVisual({
     return hit ? hit.point.clone() : null
   }, [geometry, gl, camera])
 
+  /** Per curve libere: intersezione del pointer col piano di quota ⊥ asse */
+  const raycastToPlane = useCallback((clientX: number, clientY: number, through: THREE.Vector3): THREE.Vector3 | null => {
+    const axis = insertionAxis?.clone().normalize() ?? new THREE.Vector3(0, 1, 0)
+    const rect = gl.domElement.getBoundingClientRect()
+    const ndc = new THREE.Vector2(
+      ((clientX - rect.left) / rect.width) * 2 - 1,
+      -((clientY - rect.top) / rect.height) * 2 + 1
+    )
+    raycaster.current.setFromCamera(ndc, camera)
+    const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(axis, through)
+    const out = new THREE.Vector3()
+    return raycaster.current.ray.intersectPlane(plane, out) ? out : null
+  }, [insertionAxis, gl, camera])
+
   const startDrag = useCallback((index: number, e: ThreeEvent<PointerEvent>) => {
     if (!editable) return
     e.stopPropagation()
@@ -68,8 +84,11 @@ export function SplitCurveVisual({
     // eslint-disable-next-line react-hooks/immutability
     if (orbitControls) orbitControls.enabled = false
 
+    const dragOrigin = curve.controlPoints[index].clone()
     const handleMove = (ev: PointerEvent) => {
-      const point = raycastToSurface(ev.clientX, ev.clientY)
+      const point = curve.mode === 'free'
+        ? raycastToPlane(ev.clientX, ev.clientY, dragOrigin)
+        : raycastToSurface(ev.clientX, ev.clientY)
       if (point) onMovePoint(index, point)
     }
     const handleUp = () => {
@@ -80,7 +99,7 @@ export function SplitCurveVisual({
     }
     window.addEventListener('pointermove', handleMove)
     window.addEventListener('pointerup', handleUp)
-  }, [editable, controls, onSelectPoint, onBeginDrag, onMovePoint, raycastToSurface])
+  }, [editable, controls, curve, onSelectPoint, onBeginDrag, onMovePoint, raycastToSurface, raycastToPlane])
 
   const handleSphereClick = useCallback((index: number, e: ThreeEvent<MouseEvent>) => {
     e.stopPropagation()

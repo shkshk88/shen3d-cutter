@@ -18,7 +18,7 @@ import { computeBoundsTree, disposeBoundsTree, acceleratedRaycast } from 'three-
 import { buildMeshGraph } from '../src/lib/mesh-graph'
 import { computeCurvatureFromGraph } from '../src/lib/curvature'
 import { detectScrewChannels, ScrewChannel, computeInsertionAxis } from '../src/lib/screw-channels'
-import { proposeSplitCurve, densifySplitCurve, validateSplitCurve, serializeCurvePoints } from '../src/lib/split-curve'
+import { proposeSplitCurve, proposeCurveFromBarProfile, densifySplitCurve, validateSplitCurve, serializeCurvePoints } from '../src/lib/split-curve'
 
 THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree
 THREE.BufferGeometry.prototype.disposeBoundsTree = disposeBoundsTree
@@ -128,6 +128,19 @@ describe.skipIf(!existsSync(SAMPLES_DIR))('validazione STL reali', () => {
 
       expect(validation.valid).toBe(true)
 
+      // Proposta alternativa dal profilo barra di supporto
+      const fromBar = proposeCurveFromBarProfile({
+        graph,
+        channels,
+        insertionAxis,
+        geometry,
+      })
+      expect(fromBar).not.toBeNull()
+      const barDense = densifySplitCurve(fromBar!, geometry)
+      const barValidation = validateSplitCurve(fromBar!, barDense, channels, insertionAxis)
+      console.log(`curva da profilo barra: ${fromBar!.controlPoints.length} punti · validazione: ${barValidation.valid ? 'OK' : 'ERRORI: ' + barValidation.errors.join(' · ')}${barValidation.warnings.length ? ' · ⚠ ' + barValidation.warnings.join(' · ') : ''}`)
+      expect(barValidation.valid).toBe(true)
+
       // Esporta il job per la pipeline backend
       mkdirSync(OUT_DIR, { recursive: true })
       const job = {
@@ -146,6 +159,14 @@ describe.skipIf(!existsSync(SAMPLES_DIR))('validazione STL reali', () => {
       const jobPath = `${OUT_DIR}/${testCase.name}.job.json`
       writeFileSync(jobPath, JSON.stringify(job, null, 2))
       console.log(`job scritto: ${jobPath}`)
+
+      // Variante con la curva da profilo barra (curva libera, barra stretta)
+      const barJobPath = `${OUT_DIR}/${testCase.name}-bar.job.json`
+      writeFileSync(barJobPath, JSON.stringify({
+        ...job,
+        curve: serializeCurvePoints(barDense),
+      }, null, 2))
+      console.log(`job (profilo barra) scritto: ${barJobPath}`)
     }, 300_000)
   }
 })

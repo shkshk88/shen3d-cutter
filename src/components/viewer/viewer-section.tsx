@@ -6,7 +6,14 @@ import { Button } from '@/components/ui/button'
 import { Slider } from '@/components/ui/slider'
 import { MeshAnalysisResult } from '@/lib/mesh-analysis'
 import { fitChannelFromSeed, computeInsertionAxis } from '@/lib/screw-channels'
-import { proposeSplitCurve, saveCurveToStorage, loadCurveFromStorage } from '@/lib/split-curve'
+import {
+  proposeSplitCurve,
+  proposeCurveFromBarProfile,
+  saveCurveToStorage,
+  loadCurveFromStorage,
+  BarProfile,
+  DEFAULT_BAR_PROFILE,
+} from '@/lib/split-curve'
 import { useSplitCurveTool } from './split-curve-tool'
 import { useAnnotationTool } from './annotation-tool'
 import {
@@ -64,6 +71,8 @@ export function ViewerSection({
   const [barJob, setBarJob] = useState<JobStatus | null>(null)
   const [barJobRunning, setBarJobRunning] = useState(false)
   const [barDialogOpen, setBarDialogOpen] = useState(false)
+  const [barProfile, setBarProfile] = useState<BarProfile>(DEFAULT_BAR_PROFILE)
+  const [barProfileMode, setBarProfileMode] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   // Cache dell'upload: rigenerare con parametri diversi non richiede re-upload
   const lastUploadRef = useRef<{ file: File; stlPath: string } | null>(null)
@@ -208,11 +217,60 @@ export function ViewerSection({
       geometry,
     })
     if (proposed) {
+      setBarProfileMode(false)
       curveTool.setCurve(proposed)
     } else {
       alert('Impossibile proporre una curva: silhouette non trovata a quella quota')
     }
   }, [analysisResult, geometry, curveTool])
+
+  const handleProposeFromBar = useCallback((profile: BarProfile) => {
+    if (!analysisResult) return
+    const proposed = proposeCurveFromBarProfile({
+      graph: analysisResult.graph,
+      channels: analysisResult.channels,
+      insertionAxis: analysisResult.insertionAxis,
+      geometry,
+      profile,
+    })
+    if (proposed) {
+      setBarProfileMode(true)
+      curveTool.setCurve(proposed)
+    } else {
+      alert('Servono almeno 2 camini rilevati per generare la curva dal profilo barra')
+    }
+  }, [analysisResult, geometry, curveTool])
+
+  const handleBarProfileChange = useCallback((profile: BarProfile) => {
+    setBarProfile(profile)
+    // Rigenerazione live mentre trascini gli slider H/L
+    if (barProfileMode) handleProposeFromBar(profile)
+  }, [barProfileMode, handleProposeFromBar])
+
+  // Nudge strutturato del punto selezionato: altezza lungo l'asse,
+  // larghezza radiale (verso/da il baricentro della curva nel piano ⊥ asse)
+  const handleNudgeSelected = useCallback((kind: 'height' | 'width', sign: 1 | -1) => {
+    const idx = curveTool.selectedIndex
+    if (idx === null || !analysisResult?.insertionAxis) return
+    const axis = analysisResult.insertionAxis.clone().normalize()
+    const p = curveTool.curve.controlPoints[idx]
+    if (!p) return
+    const step = 0.25 * sign
+    const next = p.clone()
+    if (kind === 'height') {
+      next.addScaledVector(axis, step)
+    } else {
+      const centroid = curveTool.curve.controlPoints
+        .reduce((a, q) => a.add(q), new THREE.Vector3())
+        .divideScalar(curveTool.curve.controlPoints.length)
+      const radial = p.clone().sub(centroid)
+      radial.addScaledVector(axis, -radial.dot(axis))
+      if (radial.lengthSq() < 1e-9) return
+      next.addScaledVector(radial.normalize(), step)
+    }
+    curveTool.beginDrag()
+    curveTool.movePoint(idx, next)
+  }, [curveTool, analysisResult])
 
   const handleSaveAnnotation = useCallback(() => {
     if (!fileName) return
@@ -301,9 +359,45 @@ export function ViewerSection({
               </Button>
               {curveMode && (
                 <div className="flex items-center gap-1 border-l pl-2">
-                  <Button variant="outline" size="xs" onClick={handleProposeCurve} title="Curva proposta automaticamente dalla silhouette">
-                    ✨ Proponi
+                  <Button variant="outline" size="xs" onClick={handleProposeCurve} title="Curva dalla silhouette anatomica (incollata alla superficie)">
+                    ✨ Anatomia
                   </Button>
+                  <Button
+                    variant={barProfileMode ? 'default' : 'outline'}
+                    size="xs"
+                    onClick={() => handleProposeFromBar(barProfile)}
+                    title="Curva dal profilo di una barra di supporto (altezza × larghezza lungo l'arcata)"
+                  >
+                    ▭ Barra
+                  </Button>
+                  {barProfileMode && (
+                    <>
+                      <span className="text-[10px] text-muted-foreground">H</span>
+                      <Slider
+                        min={2} max={8} step={0.5}
+                        value={[barProfile.height_mm]}
+                        onValueChange={(v) => handleBarProfileChange({ ...barProfile, height_mm: Array.isArray(v) ? v[0] : (v as number) })}
+                        className="w-16"
+                      />
+                      <span className="text-[10px] w-8">{barProfile.height_mm.toFixed(1)}</span>
+                      <span className="text-[10px] text-muted-foreground">L</span>
+                      <Slider
+                        min={3} max={9} step={0.5}
+                        value={[barProfile.width_mm]}
+                        onValueChange={(v) => handleBarProfileChange({ ...barProfile, width_mm: Array.isArray(v) ? v[0] : (v as number) })}
+                        className="w-16"
+                      />
+                      <span className="text-[10px] w-8">{barProfile.width_mm.toFixed(1)}</span>
+                    </>
+                  )}
+                  {curveTool.selectedIndex !== null && (
+                    <div className="flex items-center gap-0.5 border-l pl-1" title="Punto selezionato: altezza (▲▼) e larghezza (◀▶) a passi di 0.25mm">
+                      <Button variant="outline" size="xs" onClick={() => handleNudgeSelected('height', 1)}>▲</Button>
+                      <Button variant="outline" size="xs" onClick={() => handleNudgeSelected('height', -1)}>▼</Button>
+                      <Button variant="outline" size="xs" onClick={() => handleNudgeSelected('width', -1)}>◀</Button>
+                      <Button variant="outline" size="xs" onClick={() => handleNudgeSelected('width', 1)}>▶</Button>
+                    </div>
+                  )}
                   <Button variant="outline" size="xs" onClick={curveTool.closeLoop} disabled={!curveTool.canClose}>
                     Chiudi loop
                   </Button>

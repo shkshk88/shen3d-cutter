@@ -49,6 +49,7 @@ export function useSplitCurveTool({ geometry, channels, insertionAxis }: UseSpli
     undoStack.current.push({
       controlPoints: snapshot.controlPoints.map(p => p.clone()),
       closed: snapshot.closed,
+      mode: snapshot.mode,
     })
     if (undoStack.current.length > MAX_UNDO) undoStack.current.shift()
     setUndoSize(undoStack.current.length)
@@ -110,6 +111,7 @@ export function useSplitCurveTool({ geometry, channels, insertionAxis }: UseSpli
       return {
         controlPoints,
         closed: controlPoints.length >= 3 ? prev.closed : false,
+        mode: prev.mode,
       }
     })
     setSelectedIndex(null)
@@ -146,6 +148,7 @@ export function useSplitCurveTool({ geometry, channels, insertionAxis }: UseSpli
       return {
         controlPoints: next.controlPoints.map(p => p.clone()),
         closed: next.closed,
+        mode: next.mode,
       }
     })
     setSelectedIndex(null)

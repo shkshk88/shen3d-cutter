@@ -89,6 +89,7 @@ export function StlViewer({
           densified={splitCurveTool.densified}
           selectedIndex={splitCurveTool.selectedIndex}
           geometry={modelGeometry ?? null}
+          insertionAxis={analysisResult?.insertionAxis ?? null}
           editable={!!curveEditMode}
           valid={splitCurveTool.validation.valid || !splitCurveTool.curve.closed}
           onSelectPoint={splitCurveTool.selectPoint}

@@ -11,6 +11,14 @@ import { computeCurvatureFromGraph } from './curvature'
 export interface SplitCurve {
   controlPoints: THREE.Vector3[]
   closed: boolean
+  /**
+   * 'surface' (default): curva incollata alla superficie (densificazione
+   * riproiettata via BVH) — proposta anatomica e disegno manuale.
+   * 'free': curva libera nello spazio (da profilo barra): il muro del prisma
+   * di split può tagliare attraverso il corpo — è così che si ottiene una
+   * barra più stretta dell'anatomia, avvolta dalla sovrastruttura.
+   */
+  mode?: 'surface' | 'free'
 }
 
 export interface CurveValidation {
@@ -55,7 +63,7 @@ export function densifySplitCurve(
   }
 
   const bvh = geometry?.boundsTree
-  if (bvh) {
+  if (bvh && curve.mode !== 'free') {
     const target = {
       point: new THREE.Vector3(),
       distance: 0,
@@ -237,6 +245,7 @@ export function saveCurveToStorage(fileName: string, curve: SplitCurve): void {
       JSON.stringify({
         controlPoints: serializeCurvePoints(curve.controlPoints),
         closed: curve.closed,
+        mode: curve.mode ?? 'surface',
       })
     )
   } catch {
@@ -249,11 +258,12 @@ export function loadCurveFromStorage(fileName: string): SplitCurve | null {
   try {
     const raw = window.localStorage.getItem(CURVE_STORAGE_PREFIX + fileName)
     if (!raw) return null
-    const parsed = JSON.parse(raw) as { controlPoints: number[][]; closed: boolean }
+    const parsed = JSON.parse(raw) as { controlPoints: number[][]; closed: boolean; mode?: 'surface' | 'free' }
     if (!Array.isArray(parsed.controlPoints)) return null
     return {
       controlPoints: deserializeCurvePoints(parsed.controlPoints),
       closed: !!parsed.closed,
+      mode: parsed.mode === 'free' ? 'free' : 'surface',
     }
   } catch {
     return null
@@ -477,21 +487,40 @@ export function proposeSplitCurve(input: ProposeCurveInput): SplitCurve | null {
     return best ?? cp
   })
 
-  // Riproiezione sulla superficie
-  const bvh = geometry?.boundsTree
-  const reproject = (pts: THREE.Vector3[]) => {
-    if (!bvh) return
-    const target = { point: new THREE.Vector3(), distance: 0, faceIndex: 0 }
-    for (const p of pts) {
-      const hit = bvh.closestPointToPoint(p, target)
-      if (hit) p.copy(hit.point)
-    }
-  }
-  reproject(controls)
+  refineControlsAgainstChannels(controls, channels, axis, geometry ?? null)
 
-  // Enforcement clearance dai camini: se un punto entra nel vuoto del canale
-  // o rasenta la parete (succede coi posteriori inclinati), spingilo
-  // radialmente verso l'esterno e riproietta sulla superficie
+  return { controlPoints: controls, closed: true, mode: 'surface' }
+}
+
+/** Riproietta i punti sulla superficie della mesh (in place) */
+export function projectOntoSurface(
+  points: THREE.Vector3[],
+  geometry: THREE.BufferGeometry | null
+): void {
+  const bvh = geometry?.boundsTree
+  if (!bvh) return
+  const target = { point: new THREE.Vector3(), distance: 0, faceIndex: 0 }
+  for (const p of points) {
+    const hit = bvh.closestPointToPoint(p, target)
+    if (hit) p.copy(hit.point)
+  }
+}
+
+/**
+ * Rifinitura comune delle proposte: riproiezione sulla superficie +
+ * enforcement della clearance dai camini (spinta radiale dei punti che
+ * entrano nel vuoto o rasentano la parete, poi correzione sui campioni
+ * densificati dove la Catmull "taglia l'angolo").
+ */
+function refineControlsAgainstChannels(
+  controls: THREE.Vector3[],
+  channels: ScrewChannel[],
+  axis: THREE.Vector3,
+  geometry: THREE.BufferGeometry | null
+): void {
+  const rel = new THREE.Vector3()
+  projectOntoSurface(controls, geometry)
+
   const proposalClearance = 0.9
   for (let iter = 0; iter < 3; iter++) {
     let moved = false
@@ -514,14 +543,11 @@ export function proposeSplitCurve(input: ProposeCurveInput): SplitCurve | null {
       }
     }
     if (!moved) break
-    reproject(controls)
+    projectOntoSurface(controls, geometry)
   }
 
-  // La Catmull densificata può "tagliare l'angolo" rientrando verso il canale
-  // anche con punti di controllo liberi: verifica sui campioni densificati e
-  // spingi più forte il punto di controllo più vicino alla violazione
   for (let iter = 0; iter < 5; iter++) {
-    const densified = densifySplitCurve({ controlPoints: controls, closed: true }, geometry ?? null)
+    const densified = densifySplitCurve({ controlPoints: controls, closed: true }, geometry)
     let worst: { sample: THREE.Vector3; channel: ScrewChannel } | null = null
     let worstDist = 0.45 // margine sopra la clearance di validazione (0.3)
     for (const sample of densified) {
@@ -560,8 +586,158 @@ export function proposeSplitCurve(input: ProposeCurveInput): SplitCurve | null {
     cp.copy(ch.bottom)
       .addScaledVector(ch.axis, THREE.MathUtils.clamp(t, 0, ch.height))
       .addScaledVector(dir, ch.radius + 0.7 + iter * 0.3)
-    reproject(controls)
+    projectOntoSurface(controls, geometry)
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Proposta curva da profilo barra di supporto
+// ---------------------------------------------------------------------------
+
+/** Profilo della barra di supporto virtuale che genera la linea di taglio */
+export interface BarProfile {
+  /** Altezza del bordo superiore sopra la quota delle sedi implantari (mm) */
+  height_mm: number
+  /** Larghezza della barra (vestibolo-linguale, mm) */
+  width_mm: number
+  /** Estensione distale oltre gli impianti terminali (cantilever, mm) */
+  distal_extension_mm: number
+}
+
+export const DEFAULT_BAR_PROFILE: BarProfile = {
+  height_mm: 4.5,
+  width_mm: 5.0,
+  distal_extension_mm: 6.0,
+}
+
+export interface ProposeFromBarInput {
+  graph: MeshGraph
+  channels: ScrewChannel[]
+  insertionAxis: THREE.Vector3 | null
+  geometry: THREE.BufferGeometry | null
+  profile?: Partial<BarProfile>
+  controlPointCount?: number
+}
+
+/**
+ * Genera la curva di split dal profilo di una barra di supporto virtuale
+ * (workflow exocad-style): il profilo (altezza × larghezza) viene sviluppato
+ * lungo l'arcata attraverso le sedi implantari; il bordo superiore della
+ * barra — un "racetrack" attorno alla centerline a quota sedi+altezza —
+ * proiettato sulla superficie diventa la linea di taglio, poi rifinibile
+ * coi punti di controllo.
+ *
+ * Richiede ≥2 camini (con meno non esiste un'arcata da seguire).
+ */
+export function proposeCurveFromBarProfile(input: ProposeFromBarInput): SplitCurve | null {
+  const { channels } = input
+  if (channels.length < 2) return null
+
+  const profile: BarProfile = { ...DEFAULT_BAR_PROFILE, ...input.profile }
+  const controlPointCount = input.controlPointCount ?? 28
+  const axis = (input.insertionAxis ?? new THREE.Vector3(0, 1, 0)).clone().normalize()
+
+  // Base ortonormale del piano ⊥ asse di inserzione
+  const ref = Math.abs(axis.x) < 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0)
+  const u = new THREE.Vector3().crossVectors(axis, ref).normalize()
+  const v = new THREE.Vector3().crossVectors(axis, u).normalize()
+
+  // Sedi implantari proiettate in 2D, ordinate lungo l'arcata:
+  // sort angolare attorno al centroide, poi rotazione della sequenza per
+  // iniziare dopo il gap angolare massimo (l'apertura del ferro di cavallo)
+  const pts2d = channels.map(ch => new THREE.Vector2(ch.bottom.dot(u), ch.bottom.dot(v)))
+  const centroid2d = pts2d.reduce((a, p) => a.add(p), new THREE.Vector2()).divideScalar(pts2d.length)
+  const order = pts2d
+    .map((p, i) => ({ i, angle: Math.atan2(p.y - centroid2d.y, p.x - centroid2d.x) }))
+    .sort((a, b) => a.angle - b.angle)
+  let maxGap = -1
+  let startAt = 0
+  for (let k = 0; k < order.length; k++) {
+    const next = order[(k + 1) % order.length]
+    let gap = next.angle - order[k].angle
+    if (gap < 0) gap += Math.PI * 2
+    if (gap > maxGap) {
+      maxGap = gap
+      startAt = (k + 1) % order.length
+    }
+  }
+  const sorted2d: THREE.Vector2[] = []
+  for (let k = 0; k < order.length; k++) {
+    sorted2d.push(pts2d[order[(startAt + k) % order.length].i].clone())
   }
 
-  return { controlPoints: controls, closed: true }
+  // Centerline 2D con estensione distale (cantilever) alle due estremità
+  const centerline: THREE.Vector2[] = [...sorted2d]
+  if (centerline.length >= 2) {
+    const startDir = centerline[0].clone().sub(centerline[1]).normalize()
+    const endDir = centerline[centerline.length - 1].clone()
+      .sub(centerline[centerline.length - 2]).normalize()
+    centerline.unshift(centerline[0].clone().addScaledVector(startDir, profile.distal_extension_mm))
+    centerline.push(centerline[centerline.length - 1].clone().addScaledVector(endDir, profile.distal_extension_mm))
+  }
+
+  // Racetrack: offset laterale ±larghezza/2 + cap semicircolari alle estremità
+  const half = profile.width_mm / 2
+  const normalAt = (idx: number): THREE.Vector2 => {
+    const prev = centerline[Math.max(idx - 1, 0)]
+    const next = centerline[Math.min(idx + 1, centerline.length - 1)]
+    const tangent = next.clone().sub(prev).normalize()
+    return new THREE.Vector2(-tangent.y, tangent.x)
+  }
+  const left: THREE.Vector2[] = []
+  const right: THREE.Vector2[] = []
+  for (let i = 0; i < centerline.length; i++) {
+    const n = normalAt(i)
+    left.push(centerline[i].clone().addScaledVector(n, half))
+    right.push(centerline[i].clone().addScaledVector(n, -half))
+  }
+  // Cap semicircolare: arco da +n a −n passando per la direzione esterna
+  const cap = (end: THREE.Vector2, dirOut: THREE.Vector2, n: THREE.Vector2): THREE.Vector2[] => {
+    const points: THREE.Vector2[] = []
+    for (let s = 1; s < 6; s++) {
+      const theta = (s / 6) * Math.PI
+      points.push(end.clone()
+        .addScaledVector(n, Math.cos(theta) * half)
+        .addScaledVector(dirOut, Math.sin(theta) * half))
+    }
+    return points
+  }
+  const endIdx = centerline.length - 1
+  const endDirOut = centerline[endIdx].clone().sub(centerline[endIdx - 1]).normalize()
+  const startDirOut = centerline[0].clone().sub(centerline[1]).normalize()
+  const nEnd = normalAt(endIdx)
+  const nStart = normalAt(0)
+
+  const loop2d: THREE.Vector2[] = [
+    ...left,
+    // dal lato sinistro (+n) al destro (−n) attorno all'estremità finale
+    ...cap(centerline[endIdx], endDirOut, nEnd),
+    ...right.slice().reverse(),
+    // e attorno all'estremità iniziale (dal destro −n al sinistro +n)
+    ...cap(centerline[0], startDirOut, nStart.clone().negate()),
+  ]
+
+  // Quota del bordo superiore della barra: mediana sedi + altezza profilo
+  const heights = channels.map(ch => ch.bottom.dot(axis)).sort((a, b) => a - b)
+  const t = heights[Math.floor(heights.length / 2)] + profile.height_mm
+
+  // Solleva in 3D, ricampiona e riduci ai punti di controllo
+  const loop3d = loop2d.map(p =>
+    new THREE.Vector3()
+      .addScaledVector(u, p.x)
+      .addScaledVector(v, p.y)
+      .addScaledVector(axis, t)
+  )
+  let length = 0
+  for (let i = 1; i <= loop3d.length; i++) {
+    length += loop3d[i % loop3d.length].distanceTo(loop3d[i - 1])
+  }
+  const resampled = resampleUniform(loop3d, length / controlPointCount, true)
+  const controls = resampled.slice(0, controlPointCount)
+
+  // Curva LIBERA: niente proiezione sulla superficie (il muro del prisma può
+  // attraversare il corpo); resta l'enforcement della clearance dai camini
+  refineControlsAgainstChannels(controls, channels, axis, null)
+
+  return { controlPoints: controls, closed: true, mode: 'free' }
 }

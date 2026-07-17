@@ -131,3 +131,59 @@ describe('proposeSplitCurve', () => {
     }
   })
 })
+
+describe('proposeCurveFromBarProfile', () => {
+  it('genera un racetrack chiuso attorno alle sedi implantari', async () => {
+    const { proposeCurveFromBarProfile } = await import('../split-curve')
+    // 4 canali su un arco di cerchio nel piano XZ, assi Y
+    const channels = [15, 60, 120, 165].map((deg, i) => {
+      const a = (deg * Math.PI) / 180
+      const c = new THREE.Vector3(22 * Math.cos(a), 0, 22 * Math.sin(a))
+      return {
+        id: `c${i}`,
+        center: c.clone(),
+        axis: new THREE.Vector3(0, 1, 0),
+        radius: 1.0,
+        height: 10,
+        top: c.clone().setY(5),
+        bottom: c.clone().setY(-5),
+        confidence: 1,
+        source: 'auto' as const,
+      }
+    })
+
+    const height = 4.5
+    const width = 5.0
+    const curve = proposeCurveFromBarProfile({
+      graph: { uniqueCount: 0, positions: new Float32Array(), renderToUnique: new Uint32Array(), triangles: new Uint32Array(), normals: new Float32Array() },
+      channels,
+      insertionAxis: new THREE.Vector3(0, 1, 0),
+      geometry: null,
+      profile: { height_mm: height, width_mm: width },
+    })
+
+    expect(curve).not.toBeNull()
+    expect(curve!.closed).toBe(true)
+    expect(curve!.controlPoints.length).toBeGreaterThanOrEqual(20)
+
+    // Quota: sedi a y=-5 → bordo superiore a -5 + height (niente proiezione)
+    for (const p of curve!.controlPoints) {
+      expect(Math.abs(p.y - (-5 + height))).toBeLessThan(0.01)
+    }
+
+    // Il loop racchiude tutte le sedi nella proiezione XZ (ray casting 2D)
+    const poly = curve!.controlPoints.map(p => [p.x, p.z] as const)
+    const inside = (x: number, z: number) => {
+      let odd = false
+      for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+        const [xi, zi] = poly[i]
+        const [xj, zj] = poly[j]
+        if ((zi > z) !== (zj > z) && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) odd = !odd
+      }
+      return odd
+    }
+    for (const ch of channels) {
+      expect(inside(ch.center.x, ch.center.z)).toBe(true)
+    }
+  })
+})
