@@ -41,3 +41,5 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 test-assets/
+__pycache__/
+*.pyc
