@@ -14,15 +14,19 @@
       "Bash(cp *)",
       "Bash(mv *)",
       "Bash(rm *)",
-      "Bash(pwd)"
-    ],
-    "ask": [
-      "Bash(curl *)",
-      "Bash(wget *)"
+      "Bash(pwd)",
+      "Bash(mkdir -p /home/user/shen3d-cutter/test-assets)",
+      "Bash(git add *)",
+      "Bash(git commit -q -m 'chore: aggiorna permessi locali sessione \\(.claude/settings.local.json\\) *)",
+      "Bash(git push *)"
     ],
     "deny": [
       "Bash(rm -rf /)",
       "Bash(sudo rm *)"
+    ],
+    "ask": [
+      "Bash(curl *)",
+      "Bash(wget *)"
     ]
   }
 }
