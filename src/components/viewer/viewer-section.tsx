@@ -12,6 +12,8 @@ import { useSplitCurveTool } from './split-curve-tool'
 import { useAnnotationTool } from './annotation-tool'
 import { uploadStlToServer, splitStl, SplitResult } from '@/lib/cutter-client'
 import { SplitResultDialog } from './split-result-dialog'
+import { startSplitBarJob, pollJobUntilDone, JobStatus, DEFAULT_BAR_PARAMS } from '@/lib/bar-client'
+import { BarResultDialog } from './bar-result-dialog'
 import * as THREE from 'three'
 
 export interface PlaneParams {
@@ -68,6 +70,9 @@ export function ViewerSection({ analysisResult, onAnalysisResultChange, selected
   const [channelAddMode, setChannelAddMode] = useState(false)
   const [curveMode, setCurveMode] = useState(false)
   const [geometry, setGeometry] = useState<THREE.BufferGeometry | null>(null)
+  const [barJob, setBarJob] = useState<JobStatus | null>(null)
+  const [barJobRunning, setBarJobRunning] = useState(false)
+  const [barDialogOpen, setBarDialogOpen] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const annotationTool = useAnnotationTool()
@@ -164,6 +169,38 @@ export function ViewerSection({ analysisResult, onAnalysisResultChange, selected
       annotationTool.addPoint(point)
     }
   }, [curveMode, curveTool, channelAddMode, annotationMode, annotationTool, geometry, analysisResult, onAnalysisResultChange])
+
+  const handleGenerateSplit = useCallback(async () => {
+    if (!stlFile || !analysisResult?.insertionAxis) return
+    if (!curveTool.curve.closed || !curveTool.validation.valid) return
+
+    setBarJobRunning(true)
+    setBarJob(null)
+    try {
+      const upload = await uploadStlToServer(stlFile)
+      const jobId = await startSplitBarJob({
+        stlPath: upload.stl_path,
+        curvePoints: curveTool.densified,
+        insertionAxis: analysisResult.insertionAxis,
+        channels: analysisResult.channels,
+        params: DEFAULT_BAR_PARAMS,
+      })
+      const final = await pollJobUntilDone(jobId, setBarJob)
+      setBarJob(final)
+      setBarDialogOpen(true)
+    } catch (err) {
+      setBarJob({
+        job_id: '',
+        status: 'error',
+        stage: null,
+        failed_stage: null,
+        error: err instanceof Error ? err.message : 'Errore sconosciuto',
+      })
+      setBarDialogOpen(true)
+    } finally {
+      setBarJobRunning(false)
+    }
+  }, [stlFile, analysisResult, curveTool.curve, curveTool.densified, curveTool.validation])
 
   const handleProposeCurve = useCallback(() => {
     if (!analysisResult) return
@@ -346,6 +383,24 @@ export function ViewerSection({ analysisResult, onAnalysisResultChange, selected
                       {curveTool.validation.valid ? '✓ valida' : '✗ ' + curveTool.validation.errors[0]}
                     </span>
                   )}
+                  {curveTool.curve.closed && curveTool.validation.valid && (
+                    <Button
+                      variant="default"
+                      size="xs"
+                      className="bg-green-600 hover:bg-green-700 text-white"
+                      onClick={handleGenerateSplit}
+                      disabled={barJobRunning || !stlFile}
+                    >
+                      {barJobRunning ? (
+                        <>
+                          <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin inline-block mr-1" />
+                          {barJob?.status === 'running' ? `Stage ${barJob.stage ?? '…'}` : 'Genero…'}
+                        </>
+                      ) : (
+                        '⚙ Genera split'
+                      )}
+                    </Button>
+                  )}
                 </div>
               )}
               <Button
@@ -493,6 +548,13 @@ export function ViewerSection({ analysisResult, onAnalysisResultChange, selected
           open={splitDialogOpen}
           onOpenChange={setSplitDialogOpen}
           result={splitResult}
+        />
+
+        {/* Bar split result dialog */}
+        <BarResultDialog
+          open={barDialogOpen}
+          onOpenChange={setBarDialogOpen}
+          job={barJob}
         />
       </div>
     </div>
