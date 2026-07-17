@@ -3,8 +3,7 @@ import { ScrewChannel } from './screw-channels'
 import { serializeCurvePoints } from './split-curve'
 
 /**
- * Client per l'API v2 (split barra/sovrastruttura).
- * Evolve cutter-client.ts: job asincroni con polling.
+ * Client per l'API v2 (split barra/sovrastruttura): job asincroni con polling.
  */
 
 export interface BarParams {

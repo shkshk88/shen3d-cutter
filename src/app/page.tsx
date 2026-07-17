@@ -1,21 +1,19 @@
 'use client'
 
 import { useState, useCallback } from 'react'
-import { ViewerSection, PlaneParams } from '@/components/viewer/viewer-section'
+import { ViewerSection } from '@/components/viewer/viewer-section'
 import { Sidebar } from '@/components/layout/sidebar'
 import { MeshAnalysisResult } from '@/lib/mesh-analysis'
-import { CuttingResult } from '@/lib/cutting-plane'
 import { computeInsertionAxis } from '@/lib/screw-channels'
+import { BarParams, DEFAULT_BAR_PARAMS } from '@/lib/bar-client'
 
 export default function Home() {
   const [analysisResult, setAnalysisResult] = useState<MeshAnalysisResult | null>(null)
   const [selectedImplant, setSelectedImplant] = useState<number | null>(null)
   const [annotationCount, setAnnotationCount] = useState(0)
-  const [cuttingResult, setCuttingResult] = useState<CuttingResult | null>(null)
-  const [selectedPlaneId, setSelectedPlaneId] = useState<string | null>(null)
-  const [planeParams, setPlaneParams] = useState<Record<string, PlaneParams>>({})
   const [fileName, setFileName] = useState('')
   const [stlFile, setStlFile] = useState<File | null>(null)
+  const [barParams, setBarParams] = useState<BarParams>(DEFAULT_BAR_PARAMS)
 
   const handleAnnotationSave = useCallback(() => {
     setAnnotationCount(prev => prev + 1)
@@ -30,15 +28,6 @@ export default function Home() {
     setSelectedImplant(null)
   }, [])
 
-  const handleCuttingResultChange = useCallback((result: CuttingResult | null) => {
-    setCuttingResult(result)
-    if (!result) {
-      setSelectedPlaneId(null)
-      setPlaneParams({})
-      setStlFile(null)
-    }
-  }, [])
-
   return (
     <div className="flex h-screen bg-background">
       <Sidebar
@@ -47,11 +36,9 @@ export default function Home() {
         onImplantSelect={setSelectedImplant}
         onChannelRemove={handleChannelRemove}
         annotationCount={annotationCount}
-        cuttingResult={cuttingResult}
-        selectedPlaneId={selectedPlaneId}
-        onPlaneSelect={setSelectedPlaneId}
         fileName={fileName}
-        planeParams={planeParams}
+        barParams={barParams}
+        onBarParamsChange={setBarParams}
       />
       <main className="flex-1 overflow-hidden">
         <ViewerSection
@@ -60,15 +47,10 @@ export default function Home() {
           selectedImplant={selectedImplant}
           onImplantSelect={setSelectedImplant}
           onAnnotationSave={handleAnnotationSave}
-          cuttingResult={cuttingResult}
-          onCuttingResultChange={handleCuttingResultChange}
-          selectedPlaneId={selectedPlaneId}
-          onPlaneSelect={setSelectedPlaneId}
-          planeParams={planeParams}
-          onPlaneParamsChange={setPlaneParams}
           onFileNameChange={setFileName}
           stlFile={stlFile}
           onStlFileChange={setStlFile}
+          barParams={barParams}
         />
       </main>
     </div>

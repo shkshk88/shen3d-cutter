@@ -8,19 +8,9 @@ import { StlModel } from './stl-model'
 import { LoadingSpinner } from './loading-spinner'
 import { ImplantMarker } from './implant-marker'
 import { InsertionAxisWidget } from './insertion-axis-widget'
-import { CuttingPlaneVisual } from './cutting-plane-visual'
-import { CutLineVisual } from './cut-line-visual'
 import { MeshAnalysisResult } from '@/lib/mesh-analysis'
-import { CuttingResult, CuttingPlane } from '@/lib/cutting-plane'
-import { intersectPlaneMesh } from '@/lib/mesh-intersection'
-import { PlaneParams } from './viewer-section'
 import { SplitCurveVisual } from './split-curve-visual'
 import { SplitCurveTool } from './split-curve-tool'
-
-interface SeparationPlane {
-  normal: THREE.Vector3
-  point: THREE.Vector3
-}
 
 interface StlViewerProps {
   url: string
@@ -36,21 +26,12 @@ interface StlViewerProps {
   splitCurveTool?: SplitCurveTool
   curveEditMode?: boolean
   modelGeometry?: THREE.BufferGeometry | null
-  cuttingResult: CuttingResult | null
-  selectedPlaneId: string | null
-  onPlaneSelect: (id: string | null) => void
-  planeParams: Record<string, PlaneParams>
-  onPlaneParamsChange?: (params: Record<string, PlaneParams>) => void
-  showSeparation?: boolean
-  separationPlane?: SeparationPlane | null
 }
 
 export function StlViewer({
   url, analysisResult, selectedImplant, onImplantSelect, onAnalysisComplete,
   showCurvature, curvatureOpacity, annotationMode, onMeshClick, onGeometryReady,
   splitCurveTool, curveEditMode, modelGeometry,
-  cuttingResult, selectedPlaneId, onPlaneSelect, planeParams, onPlaneParamsChange,
-  showSeparation, separationPlane
 }: StlViewerProps) {
   const geometryRef = useRef<THREE.BufferGeometry | null>(null)
 
@@ -58,26 +39,6 @@ export function StlViewer({
     geometryRef.current = geometry
     onGeometryReady?.(geometry)
   }, [onGeometryReady])
-
-  const hasParams = Object.keys(planeParams).length > 0
-
-  const computedLines = useMemo(() => {
-    if (!cuttingResult || !geometryRef.current) return cuttingResult?.lines ?? []
-    const geo = geometryRef.current
-    return cuttingResult.planes.map(plane => {
-      const params = planeParams[plane.id]
-      if (!params || (params.offset === 0 && params.tiltAngle === 0)) {
-        const existing = cuttingResult.lines.find(l => l.planeId === plane.id)
-        if (existing) return existing
-      }
-      const modified: CuttingPlane = {
-        ...plane,
-        offset: params?.offset ?? 0,
-        tiltAngle: params?.tiltAngle ?? 0,
-      }
-      return intersectPlaneMesh(modified, geo)
-    })
-  }, [cuttingResult, planeParams, hasParams])
 
   // Scena in mm reali: griglia e ombre si posizionano sotto il bounding box
   // del modello (la geometria non viene più centrata/scalata)
@@ -118,8 +79,6 @@ export function StlViewer({
             annotationMode={annotationMode}
             onMeshClick={onMeshClick}
             onGeometryReady={handleGeometryReady}
-            showSeparation={showSeparation}
-            separationPlane={separationPlane}
           />
         </Bounds>
       </Suspense>
@@ -160,20 +119,6 @@ export function StlViewer({
           onClick={() => onImplantSelect(selectedImplant === i ? null : i)}
         />
       ))}
-
-      {cuttingResult && (
-        <CuttingPlaneVisual
-          cuttingResult={cuttingResult}
-          selectedPlaneId={selectedPlaneId}
-          onPlaneSelect={onPlaneSelect}
-          planeParams={planeParams}
-          onPlaneParamsChange={onPlaneParamsChange}
-        />
-      )}
-
-      {cuttingResult && computedLines.length > 0 && (
-        <CutLineVisual lines={computedLines} />
-      )}
 
       {sceneFrame && (
         <>

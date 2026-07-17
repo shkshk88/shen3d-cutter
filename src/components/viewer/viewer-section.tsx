@@ -1,25 +1,23 @@
 'use client'
 
-import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import dynamic from 'next/dynamic'
 import { Button } from '@/components/ui/button'
 import { Slider } from '@/components/ui/slider'
 import { MeshAnalysisResult } from '@/lib/mesh-analysis'
-import { computeCuttingResult, CuttingResult, applyPlaneParams, CuttingPlane } from '@/lib/cutting-plane'
 import { fitChannelFromSeed, computeInsertionAxis } from '@/lib/screw-channels'
 import { proposeSplitCurve, saveCurveToStorage, loadCurveFromStorage } from '@/lib/split-curve'
 import { useSplitCurveTool } from './split-curve-tool'
 import { useAnnotationTool } from './annotation-tool'
-import { uploadStlToServer, splitStl, SplitResult } from '@/lib/cutter-client'
-import { SplitResultDialog } from './split-result-dialog'
-import { startSplitBarJob, pollJobUntilDone, JobStatus, DEFAULT_BAR_PARAMS } from '@/lib/bar-client'
+import {
+  uploadStlToServer,
+  startSplitBarJob,
+  pollJobUntilDone,
+  JobStatus,
+  BarParams,
+} from '@/lib/bar-client'
 import { BarResultDialog } from './bar-result-dialog'
 import * as THREE from 'three'
-
-export interface PlaneParams {
-  offset: number
-  tiltAngle: number
-}
 
 const StlViewer = dynamic(
   () => import('./stl-viewer').then(mod => ({ default: mod.StlViewer })),
@@ -44,29 +42,22 @@ interface ViewerSectionProps {
   selectedImplant: number | null
   onImplantSelect: (index: number | null) => void
   onAnnotationSave?: () => void
-  cuttingResult: CuttingResult | null
-  onCuttingResultChange: (result: CuttingResult | null) => void
-  selectedPlaneId: string | null
-  onPlaneSelect: (id: string | null) => void
-  planeParams: Record<string, PlaneParams>
-  onPlaneParamsChange: (params: Record<string, PlaneParams>) => void
   onFileNameChange?: (name: string) => void
   stlFile?: File | null
   onStlFileChange?: (file: File | null) => void
+  barParams: BarParams
 }
 
-export function ViewerSection({ analysisResult, onAnalysisResultChange, selectedImplant, onImplantSelect, onAnnotationSave, cuttingResult, onCuttingResultChange, selectedPlaneId, onPlaneSelect, planeParams, onPlaneParamsChange, onFileNameChange, stlFile, onStlFileChange }: ViewerSectionProps) {
+export function ViewerSection({
+  analysisResult, onAnalysisResultChange, selectedImplant, onImplantSelect,
+  onAnnotationSave, onFileNameChange, stlFile, onStlFileChange, barParams,
+}: ViewerSectionProps) {
   const [stlUrl, setStlUrl] = useState<string | null>(null)
   const [fileName, setFileName] = useState<string>('')
   const [showCurvature, setShowCurvature] = useState(false)
   const [curvatureOpacity, setCurvatureOpacity] = useState(0.7)
   const [annotationMode, setAnnotationMode] = useState(false)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
-  const [showCuttingPlanes, setShowCuttingPlanes] = useState(true)
-  const [showSeparation, setShowSeparation] = useState(false)
-  const [isCutting, setIsCutting] = useState(false)
-  const [splitResult, setSplitResult] = useState<SplitResult | null>(null)
-  const [splitDialogOpen, setSplitDialogOpen] = useState(false)
   const [channelAddMode, setChannelAddMode] = useState(false)
   const [curveMode, setCurveMode] = useState(false)
   const [geometry, setGeometry] = useState<THREE.BufferGeometry | null>(null)
@@ -103,11 +94,10 @@ export function ViewerSection({ analysisResult, onAnalysisResultChange, selected
     setShowCurvature(false)
     setAnnotationMode(false)
     setIsAnalyzing(true)
-    onCuttingResultChange(null)
-    setSplitResult(null)
     setCurveMode(false)
     setChannelAddMode(false)
     setGeometry(null)
+    setBarJob(null)
     curveTool.clear()
     onStlFileChange?.(file)
   }, [onAnalysisResultChange, onImplantSelect, onFileNameChange, onStlFileChange, curveTool])
@@ -126,14 +116,12 @@ export function ViewerSection({ analysisResult, onAnalysisResultChange, selected
   const handleAnalysisComplete = useCallback((result: MeshAnalysisResult) => {
     onAnalysisResultChange(result)
     setIsAnalyzing(false)
-    const cutting = computeCuttingResult(result)
-    onCuttingResultChange(cutting)
     // Ripristina la curva di split salvata per questo file, se esiste
     const stored = fileName ? loadCurveFromStorage(fileName) : null
     if (stored && stored.controlPoints.length > 0) {
       curveTool.setCurve(stored)
     }
-  }, [onAnalysisResultChange, onCuttingResultChange, fileName, curveTool])
+  }, [onAnalysisResultChange, fileName, curveTool])
 
   const handleMeshClick = useCallback((point: THREE.Vector3) => {
     if (curveMode) {
@@ -183,7 +171,7 @@ export function ViewerSection({ analysisResult, onAnalysisResultChange, selected
         curvePoints: curveTool.densified,
         insertionAxis: analysisResult.insertionAxis,
         channels: analysisResult.channels,
-        params: DEFAULT_BAR_PARAMS,
+        params: barParams,
       })
       const final = await pollJobUntilDone(jobId, setBarJob)
       setBarJob(final)
@@ -200,7 +188,7 @@ export function ViewerSection({ analysisResult, onAnalysisResultChange, selected
     } finally {
       setBarJobRunning(false)
     }
-  }, [stlFile, analysisResult, curveTool.curve, curveTool.densified, curveTool.validation])
+  }, [stlFile, analysisResult, curveTool.curve, curveTool.densified, curveTool.validation, barParams])
 
   const handleProposeCurve = useCallback(() => {
     if (!analysisResult) return
@@ -228,75 +216,16 @@ export function ViewerSection({ analysisResult, onAnalysisResultChange, selected
     }
   }, [annotationTool, fileName, analysisResult, onAnnotationSave])
 
-  const handleCut = useCallback(async () => {
-    if (!stlFile || !selectedPlaneId || !cuttingResult) return
-    const plane = cuttingResult.planes.find(p => p.id === selectedPlaneId)
-    if (!plane) return
-
-    const params = planeParams[selectedPlaneId] ?? { offset: 0, tiltAngle: 0 }
-    const modified: CuttingPlane = { ...plane, offset: params.offset, tiltAngle: params.tiltAngle }
-    const { effectiveNormal, effectivePoint } = applyPlaneParams(modified)
-
-    setIsCutting(true)
-    setSplitResult(null)
-
-    try {
-      const uploadResult = await uploadStlToServer(stlFile)
-      const result = await splitStl(
-        uploadResult.stl_path,
-        [effectiveNormal.x, effectiveNormal.y, effectiveNormal.z],
-        [effectivePoint.x, effectivePoint.y, effectivePoint.z]
-      )
-      setSplitResult(result)
-      setSplitDialogOpen(true)
-    } catch (err) {
-      setSplitResult({ engine: 'trimesh', error: err instanceof Error ? err.message : 'Errore sconosciuto' })
-      setSplitDialogOpen(true)
-    } finally {
-      setIsCutting(false)
-    }
-  }, [stlFile, selectedPlaneId, cuttingResult, planeParams])
-
-  const currentPlaneParams = selectedPlaneId ? (planeParams[selectedPlaneId] ?? { offset: 0, tiltAngle: 0 }) : { offset: 0, tiltAngle: 0 }
-
-  const updatePlaneParam = useCallback((key: 'offset' | 'tiltAngle', value: number) => {
-    if (!selectedPlaneId) return
-    onPlaneParamsChange({
-      ...planeParams,
-      [selectedPlaneId]: {
-        ...(planeParams[selectedPlaneId] ?? { offset: 0, tiltAngle: 0 }),
-        [key]: value,
-      },
-    })
-  }, [selectedPlaneId, planeParams, onPlaneParamsChange])
-
-  const resetPlaneParams = useCallback(() => {
-    if (!selectedPlaneId) return
-    onPlaneParamsChange({
-      ...planeParams,
-      [selectedPlaneId]: { offset: 0, tiltAngle: 0 },
-    })
-  }, [selectedPlaneId, planeParams, onPlaneParamsChange])
-
-  const separationPlane = useMemo(() => {
-    if (!selectedPlaneId || !cuttingResult || !showSeparation) return null
-    const plane = cuttingResult.planes.find(p => p.id === selectedPlaneId)
-    if (!plane) return null
-    const params = planeParams[selectedPlaneId] ?? { offset: 0, tiltAngle: 0 }
-    const modified: CuttingPlane = {
-      ...plane,
-      offset: params.offset,
-      tiltAngle: params.tiltAngle,
-    }
-    const { effectiveNormal, effectivePoint } = applyPlaneParams(modified)
-    return { normal: effectiveNormal, point: effectivePoint }
-  }, [selectedPlaneId, cuttingResult, showSeparation, planeParams])
+  const insertionAxisTuple: [number, number, number] | undefined =
+    analysisResult?.insertionAxis
+      ? [analysisResult.insertionAxis.x, analysisResult.insertionAxis.y, analysisResult.insertionAxis.z]
+      : undefined
 
   return (
     <div className="h-full flex flex-col">
       {/* Toolbar — visible only after file loaded */}
       {stlUrl && (
-        <div className="h-12 border-b flex items-center px-4 gap-4 bg-card overflow-x-auto">
+        <div className="h-12 border-b flex items-center px-4 gap-3 bg-card overflow-x-auto">
           <span className="text-sm font-medium whitespace-nowrap">{fileName}</span>
           <Button variant="outline" size="sm" onClick={() => { setStlUrl(null); setFileName(''); onAnalysisResultChange(null) }}>
             Nuovo file
@@ -324,7 +253,7 @@ export function ViewerSection({ analysisResult, onAnalysisResultChange, selected
           <Button
             variant={annotationMode ? 'default' : 'outline'}
             size="sm"
-            onClick={() => setAnnotationMode(!annotationMode)}
+            onClick={() => { setAnnotationMode(!annotationMode); if (!annotationMode) { setCurveMode(false); setChannelAddMode(false) } }}
           >
             Annota {annotationTool.state.points.length > 0 ? `(${annotationTool.state.points.length})` : ''}
           </Button>
@@ -403,63 +332,14 @@ export function ViewerSection({ analysisResult, onAnalysisResultChange, selected
                   )}
                 </div>
               )}
-              <Button
-                variant={showCuttingPlanes ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setShowCuttingPlanes(!showCuttingPlanes)}
-              >
-                Taglio
-              </Button>
+              {barJob?.status === 'done' && !barDialogOpen && (
+                <Button variant="outline" size="xs" onClick={() => setBarDialogOpen(true)}>
+                  Risultato
+                </Button>
+              )}
               <span className="text-xs text-muted-foreground">
                 {analysisResult.channels.length} canale/i
               </span>
-              {selectedPlaneId && (
-                <div className="flex items-center gap-3 border-l pl-3 ml-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground whitespace-nowrap">Offset</span>
-                    <Slider
-                      min={-10} max={10} step={0.5}
-                      value={[currentPlaneParams.offset]}
-                      onValueChange={(v) => updatePlaneParam('offset', Array.isArray(v) ? v[0] : v as number)}
-                      className="w-24"
-                    />
-                    <span className="text-xs w-12 text-right">{currentPlaneParams.offset > 0 ? '+' : ''}{currentPlaneParams.offset.toFixed(1)}mm</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground whitespace-nowrap">Tilt</span>
-                    <Slider
-                      min={-30} max={30} step={1}
-                      value={[currentPlaneParams.tiltAngle]}
-                      onValueChange={(v) => updatePlaneParam('tiltAngle', Array.isArray(v) ? v[0] : v as number)}
-                      className="w-24"
-                    />
-                    <span className="text-xs w-10 text-right">{currentPlaneParams.tiltAngle > 0 ? '+' : ''}{currentPlaneParams.tiltAngle}°</span>
-                  </div>
-                  <Button variant="outline" size="xs" onClick={resetPlaneParams}>
-                    Reset
-                  </Button>
-                  <Button
-                    variant={showSeparation ? 'default' : 'outline'}
-                    size="xs"
-                    onClick={() => setShowSeparation(!showSeparation)}
-                  >
-                    Separa
-                  </Button>
-                  <Button
-                    variant="default"
-                    size="xs"
-                    className="bg-green-600 hover:bg-green-700 text-white"
-                    onClick={handleCut}
-                    disabled={isCutting}
-                  >
-                    {isCutting ? (
-                      <><span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin inline-block mr-1" />Taglio...</>
-                    ) : (
-                      '✂ Taglia'
-                    )}
-                  </Button>
-                </div>
-              )}
               {analysisResult.channels.map((_, i) => (
                 <Button
                   key={i}
@@ -495,21 +375,14 @@ export function ViewerSection({ analysisResult, onAnalysisResultChange, selected
             splitCurveTool={curveTool}
             curveEditMode={curveMode}
             modelGeometry={geometry}
-            cuttingResult={showCuttingPlanes ? cuttingResult : null}
-            selectedPlaneId={selectedPlaneId}
-            onPlaneSelect={onPlaneSelect}
-            planeParams={planeParams}
-            onPlaneParamsChange={onPlaneParamsChange}
-            showSeparation={showSeparation}
-            separationPlane={separationPlane}
           />
         ) : (
           /* BIG upload area — the input IS the button */
           <div className="h-full flex items-center justify-center p-6">
             <div className="w-full max-w-sm text-center">
               <div className="text-6xl mb-6">🦷</div>
-              <h2 className="text-xl font-semibold mb-2">Shen3D Cutter</h2>
-              <p className="text-sm text-muted-foreground mb-8">Carica un file STL per analizzare il ponte dentale</p>
+              <h2 className="text-xl font-semibold mb-2">Shen3D iBar Splitter</h2>
+              <p className="text-sm text-muted-foreground mb-8">Carica la protesi ibrida monolitica (STL) per scomporla in barra + sovrastruttura</p>
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
@@ -543,18 +416,12 @@ export function ViewerSection({ analysisResult, onAnalysisResultChange, selected
           <AnnotationPoints points={annotationTool.state.points} />
         )}
 
-        {/* Cutting result dialog */}
-        <SplitResultDialog
-          open={splitDialogOpen}
-          onOpenChange={setSplitDialogOpen}
-          result={splitResult}
-        />
-
         {/* Bar split result dialog */}
         <BarResultDialog
           open={barDialogOpen}
           onOpenChange={setBarDialogOpen}
           job={barJob}
+          insertionAxis={insertionAxisTuple}
         />
       </div>
     </div>

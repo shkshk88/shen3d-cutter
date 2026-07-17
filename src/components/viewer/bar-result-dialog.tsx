@@ -8,11 +8,14 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { JobStatus, PartResult, getDownloadUrl } from '@/lib/bar-client'
+import { ResultPreview } from './result-preview'
 
 interface BarResultDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   job: JobStatus | null
+  /** Asse di inserzione per la vista esplosa */
+  insertionAxis?: [number, number, number]
 }
 
 function PartCard({ label, color, data }: { label: string; color: string; data?: PartResult }) {
@@ -37,10 +40,12 @@ function PartCard({ label, color, data }: { label: string; color: string; data?:
   )
 }
 
-export function BarResultDialog({ open, onOpenChange, job }: BarResultDialogProps) {
+export function BarResultDialog({ open, onOpenChange, job, insertionAxis }: BarResultDialogProps) {
+  const warnings = (job?.result as { warnings?: string[] } | undefined)?.warnings ?? []
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Risultato Split Barra</DialogTitle>
         </DialogHeader>
@@ -53,8 +58,20 @@ export function BarResultDialog({ open, onOpenChange, job }: BarResultDialogProp
           </div>
         ) : job?.status === 'done' && job.result ? (
           <div className="space-y-3">
-            <PartCard label="Barra primaria" color="#6366f1" data={job.result.bar} />
-            <PartCard label="Sovrastruttura" color="#f59e0b" data={job.result.superstructure} />
+            <ResultPreview
+              barFile={job.result.bar.file}
+              superFile={job.result.superstructure.file}
+              axis={insertionAxis ?? [0, 1, 0]}
+            />
+            {warnings.length > 0 && (
+              <div className="p-2 rounded bg-amber-500/10 border border-amber-500/40 text-xs text-amber-400 space-y-0.5">
+                {warnings.map((w, i) => <p key={i}>⚠ {w}</p>)}
+              </div>
+            )}
+            <div className="grid grid-cols-2 gap-3">
+              <PartCard label="Barra primaria" color="#6366f1" data={job.result.bar} />
+              <PartCard label="Sovrastruttura" color="#f59e0b" data={job.result.superstructure} />
+            </div>
           </div>
         ) : (
           <p className="text-sm text-muted-foreground">Nessun risultato disponibile</p>
