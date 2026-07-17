@@ -49,8 +49,10 @@ def test_build_split_solid_watertight():
     assert solid.volume > 0
 
 
-def test_pipeline_s1_s3(synthetic):
+def test_pipeline_full(synthetic):
+    """Pipeline completa S1–S10 con camini, gap cemento e blockout."""
     out_dir = synthetic["tmp"] / "job_direct"
+    gap = 0.08
     job = {
         "job_id": "test01",
         "out_dir": str(out_dir),
@@ -58,27 +60,40 @@ def test_pipeline_s1_s3(synthetic):
         "curve": make_split_curve(y_offset=-1.0),
         "insertion_axis": [0.0, 1.0, 0.0],
         "channels": synthetic["channels"],
-        "params": {},
+        "params": {"cement_gap_mm": gap},
     }
     report = run_pipeline(job)
+    checks = report["result"]["checks"]
 
     assert report["result"]["bar"]["watertight"]
     assert report["result"]["superstructure"]["watertight"]
-    assert report["result"]["checks"]["volume_conservation"]
+    assert checks["volume_conservation"]
+
+    # Nessuna compenetrazione barra/sovrastruttura
+    assert checks["no_interpenetration"], checks["parts_intersection_mm3"]
+
+    # Fit passivo: la sovrastruttura si sfila lungo +asse senza collisioni
+    assert checks["insertion"]["passive_fit"], checks["insertion"]
+
+    # Camini pervi in entrambe le parti (ri-foratura difensiva su S)
+    assert all(checks["channels_patent"]), checks["channels_patent"]
+
+    # Il gap misurato nelle zone contrapposte è nell'ordine del gap richiesto
+    assert checks["gap"]["opposed_samples"] > 0
+    assert checks["gap"]["gap_min"] > gap * 0.25, checks["gap"]
 
     bar = trimesh.load(out_dir / report["result"]["bar"]["file"])
     sup = trimesh.load(out_dir / report["result"]["superstructure"]["file"])
     original = synthetic["mesh"]
 
-    # Le due parti insieme ricostruiscono (quasi) il volume originale:
-    # lo split S3 è una partizione esatta, senza gap
+    # Con gap + blockout le parti non sono una partizione: somma < originale
     total = bar.volume + sup.volume
-    assert abs(total - original.volume) / original.volume < 0.01
+    assert total < original.volume
+    assert total > original.volume * 0.7
 
-    # La barra sta sotto la curva (y <= -1 + tolleranza catmull), la
-    # sovrastruttura sopra
-    assert bar.bounds[1][1] <= -1.0 + 0.5
-    assert sup.bounds[0][1] >= -1.0 - 0.5
+    # I camini estendono la barra sopra la curva (mode 'through'):
+    # la barra raggiunge l'occlusale attorno ai canali
+    assert bar.bounds[1][1] > -1.0
 
 
 def test_pipeline_subprocess_success(synthetic):

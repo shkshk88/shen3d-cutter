@@ -173,6 +173,98 @@ def union_all(meshes: list[trimesh.Trimesh], stage: str) -> trimesh.Trimesh:
 
 
 # ---------------------------------------------------------------------------
+# Camini, offset e sweep (S4–S7)
+# ---------------------------------------------------------------------------
+
+def cylinder_between(
+    p0: np.ndarray, p1: np.ndarray, radius: float, sections: int = 48
+) -> trimesh.Trimesh:
+    return trimesh.creation.cylinder(
+        radius=radius, segment=(p0, p1), sections=sections
+    )
+
+
+def make_chimney(
+    channel: dict,
+    original: trimesh.Trimesh,
+    wall_mm: float,
+    mode: str,
+) -> trimesh.Trimesh | None:
+    """S4 — Anello attorno al camino vite: cyl(r+parete) − cyl(r), clippato
+    all'anatomia. `mode='through'` arriva fin sopra l'occlusale (anello
+    visibile al foro di accesso), `'stop_below_occlusal'` si ferma sotto.
+    """
+    axis = np.asarray(channel["axis"], dtype=np.float64)
+    axis = axis / np.linalg.norm(axis)
+    bottom = np.asarray(channel["bottom"], dtype=np.float64)
+    top = np.asarray(channel["top"], dtype=np.float64)
+    radius = float(channel["radius"])
+
+    # Estremo superiore: proiezione massima dell'originale lungo l'asse
+    t_mesh_max = float(np.max(original.vertices @ axis))
+    t_bottom = float(bottom @ axis) - 0.3
+    if mode == "stop_below_occlusal":
+        t_top = float(top @ axis) - 0.8
+    else:
+        t_top = t_mesh_max + 1.0
+    if t_top - t_bottom < 1.0:
+        return None
+
+    origin = bottom - axis * (bottom @ axis)  # punto a t=0 sull'asse
+    p0 = origin + axis * t_bottom
+    p1 = origin + axis * t_top
+
+    outer = cylinder_between(p0, p1, radius + wall_mm)
+    inner = cylinder_between(p0 - axis, p1 + axis, radius)
+    ring = boolean_op(outer, inner, "difference", "S4", allow_empty=True)
+    if ring is None:
+        return None
+    clipped = boolean_op(ring, original, "intersection", "S4", allow_empty=True)
+    return clipped
+
+
+def offset_mesh(mesh: trimesh.Trimesh, distance: float) -> trimesh.Trimesh:
+    """S6 — Offset per-vertice lungo le normali (dilatazione gap cemento).
+
+    NO voxel remesh: a 60–100µm il voxel richiesto sarebbe irrealistico.
+    L'offset può auto-intersecare nelle concavità strette: il chiamante fa
+    l'unione col solido originale per sanare le pieghe (boolean_op ha il
+    fallback Blender EXACT che tollera input auto-intersecanti).
+    """
+    dilated = mesh.copy()
+    dilated.vertices = mesh.vertices + mesh.vertex_normals * distance
+    return dilated
+
+
+def sweep_along_direction(
+    mesh: trimesh.Trimesh,
+    direction: np.ndarray,
+    total_length: float,
+    step: float,
+    stage: str = "S7",
+) -> trimesh.Trimesh:
+    """S7 — Volume ombra: unione di copie traslate lungo `direction` con
+    raddoppio (Minkowski discreto con un segmento). ~log2(L/δ) unioni esatte.
+    """
+    d = np.asarray(direction, dtype=np.float64)
+    d = d / np.linalg.norm(d)
+
+    swept = mesh
+    covered = 0.0
+    shift = step
+    while covered < total_length:
+        moved = swept.copy()
+        moved.apply_translation(d * shift)
+        result = boolean_op(swept, moved, "union", stage)
+        assert result is not None
+        swept = result
+        covered += shift
+        shift = covered + step
+
+    return swept
+
+
+# ---------------------------------------------------------------------------
 # Solido di split dalla curva (bpy/bmesh)
 # ---------------------------------------------------------------------------
 
